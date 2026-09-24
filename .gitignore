@@ -1,0 +1,35 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# uv
+.python-version
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Docs build output
+site/
+
+# Playwright MCP output (snapshots written by @playwright/mcp when run locally)
+.playwright-mcp/
+
+# Environment secrets (never commit real values)
+.env
+.env.*
+!.env.example
+
+# Editor/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

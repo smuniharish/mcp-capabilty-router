@@ -1,0 +1,39 @@
+﻿site_name: MCP Capability Router
+site_description: Async capability routing for LangChain, LangGraph, and MCP adapters
+repo_name: mcp-capability-router
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - content.code.copy
+markdown_extensions:
+  - admonition
+  - pymdownx.tabbed
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - toc:
+      permalink: true
+nav:
+  - Home: index.md
+  - Architecture:
+      - Overview: architecture/overview.md
+      - Decisions: architecture/decisions.md
+  - Concepts: concepts/overview.md
+  - Guides:
+      - Getting started: guides/getting-started.md
+      - Agent integrations: guides/agent-integrations.md
+  - Examples: examples/overview.md
+  - API reference: reference/api.md
+  - Operations:
+      - Overview: operations/overview.md
+      - Concurrency: operations/concurrency.md
+      - Isolation and security: operations/isolation.md
+      - Refresh: operations/refresh.md
+      - Resilience: operations/resilience.md
+  - Troubleshooting: troubleshooting/overview.md
+extra_javascript:
+  - https://unpkg.com/mermaid@10/dist/mermaid.min.js
+  - javascripts/mermaid.js

@@ -1,0 +1,64 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mcp-capability-router"
+version = "0.1.0"
+description = "Async capability routing runtime for LangChain, LangGraph, and MCP adapters."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { file = "LICENSE" }
+dependencies = [
+  "langchain-core>=0.3",
+  "refresh-engine>=0.1.0",
+  "tenacity>=9.1",
+  "aiolimiter>=1.1",
+]
+
+[project.optional-dependencies]
+mcp = ["langchain-mcp-adapters>=0.1"]
+langgraph = ["langgraph>=0.2"]
+agents = ["langchain>=1.0", "deepagents>=0.1"]
+swarm = ["langgraph-swarm>=0.1"]
+openai = ["openai>=1.0", "langchain-openai>=0.3"]
+examples = [
+    "asyncpg>=0.31.0",
+    "prometheus-client>=0.26.0",
+    "python-dotenv>=1.0",
+    "qdrant-client>=1.19.1",
+    "rank-bm25>=0.2.2",
+]
+docs = ["mkdocs-material>=9.5", "mkdocstrings[python]>=0.26"]
+dev = [
+  "mcp-capability-router[mcp,langgraph,docs,examples]",
+  "pytest>=8.3",
+  "pytest-asyncio>=0.24",
+  "ruff>=0.6",
+  "black>=24.8",
+  "pyrefly>=0.18",
+  "build>=1.2",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mcp_capability_router"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+ignore = ["UP047", "ASYNC109"]
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+
+[tool.pyrefly]
+python-version = "3.12"
+search-path = ["src", "."]
