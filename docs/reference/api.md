@@ -3,12 +3,6 @@
 The public API is intentionally small. Internal discovery, interceptor, and resilience modules
 may evolve independently; applications should depend on the symbols documented here.
 
-::: mcp_capability_router.runtime.MCPRuntime
-
-::: mcp_capability_router.models
-
-::: mcp_capability_router.registry
-
 ## `MCPRuntime`
 
 ### Construction
@@ -23,6 +17,7 @@ MCPRuntime(
     retry: tenacity.AsyncRetrying | None = None,
     rate_limiter: aiolimiter.AsyncLimiter | None = None,
     interceptors: Iterable[Interceptor[Any]] = (),
+    metrics: MetricsHook | None = None,
 )
 ```
 
@@ -35,6 +30,11 @@ MCPRuntime(
   `retry`/`rate_limiter` accept real `tenacity.AsyncRetrying`/`aiolimiter.AsyncLimiter`
   instances, built from those libraries' own primitives. See
   [resilience](../operations/resilience.md) for behavior and limits.
+* `interceptors` wraps every operation in an ordered chain of application-supplied
+  `Interceptor` instances (for example, request logging or argument validation) that run
+  inside the bulkhead but outside the circuit breaker and retry loop.
+* `metrics` injects a `MetricsHook` observing every pipeline event. `NullMetrics` is the
+  default. See [Extension protocols](#extension-protocols) below.
 
 ### Lifecycle and server management
 
@@ -78,11 +78,35 @@ All methods are async. Network failures are chained into package exceptions such
 
 ## Extension protocols
 
-* `CapabilityRegistry`: implement `upsert_many`, `remove_missing`, `remove`, `get`, `list`, and
-  `close`.
-* `CapabilityRetriever`: implement async `retrieve(query, candidates, limit=...)`.
-* `MCPAdapter`: implement the async server operation boundary; transport and authentication
-  remain the responsibility of `langchain-mcp-adapters` and the application.
+Every extension point below is a structural `typing.Protocol`: any object with matching async
+methods works, with or without inheriting from anything. Each also ships an optional
+`*Base` abstract base class as a convenience for implementers who want a concrete,
+discoverable template — subclassing it means a forgotten method fails loudly at
+instantiation time (`TypeError`) instead of silently no-op-ing the first time the runtime
+calls it. Neither style is required; the built-in defaults (`InMemoryRegistry`,
+`DeterministicRetriever`, `NullMetrics`) satisfy their protocols structurally, without
+inheriting from the `*Base` classes.
+
+* `CapabilityRegistry` / `CapabilityRegistryBase`: implement `upsert_many`, `remove_missing`,
+  `remove`, `get`, `list`, and `close`. See `examples/custom_registry.py` (structural) and
+  `examples/postgres_registry.py` (`CapabilityRegistryBase` subclass).
+* `CapabilityRetriever` / `CapabilityRetrieverBase`: implement async
+  `retrieve(query, candidates, limit=...)`. See `examples/vector_retrieval_qdrant.py`.
+* `MCPAdapter` / `MCPAdapterBase`: implement the async server operation boundary (`connect`,
+  `close`, `list_tools`, `list_resources`, `list_prompts`, `call_tool`, `read_resource`,
+  `get_prompt`); transport and authentication remain the responsibility of
+  `langchain-mcp-adapters` or your own adapter, not the router. See
+  `examples/public_api_overrides.py`'s `FakeAdapter` for an `MCPAdapterBase` subclass.
+* `MetricsHook` / `MetricsHookBase`: implement async
+  `record(event, attributes=None)`, called for every pipeline event
+  (`operation.start`/`.success`/`.failure`, `retry`/`retry.success`/`retry.failure`,
+  `circuit.open`/`.half_open`/`.closed`, `fallback.triggered`). See
+  `examples/metrics_prometheus.py`'s `PrometheusMetricsHook` for a `MetricsHookBase` subclass.
+
+All four `MCPAdapter`, `MCPAdapterBase`, `MetricsHook`, `MetricsHookBase`,
+`CapabilityRegistry`, `CapabilityRegistryBase`, `CapabilityRetriever`, and
+`CapabilityRetrieverBase` are importable directly from the top-level `mcp_capability_router`
+package.
 
 ## Errors
 
@@ -90,18 +114,3 @@ The stable base class is `MCPCapabilityRouterError`. Important subclasses includ
 `ConfigurationError`, `ServerError`, `ConnectionError`, `DiscoveryError`, `RegistryError`,
 `RetrievalError`, `LoadingError`, `RefreshError`, `TimeoutError`, `CircuitOpenError`, and
 `RateLimitError`.
-
-## Main operations
-
-| Method | Purpose |
-|---|---|
-| `register_server` | Add a lazy factory or adapter |
-| `refresh_server` / `refresh` | Discover and reconcile metadata |
-| `retrieve` / `query` | Find ranked capabilities |
-| `load` | Load one selected capability |
-| `execute` | Invoke a tool |
-| `read_resource` | Read a resource |
-| `get_prompt` | Retrieve a prompt |
-| `connect` / `reconnect` | Manage one server connection |
-| `health` | Read the handle health state |
-| `close` | Release runtime resources |

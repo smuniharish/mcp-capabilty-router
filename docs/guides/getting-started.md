@@ -61,7 +61,12 @@ async with MCPRuntime(max_concurrency=8) as runtime:
 
 The factory must produce an object with async `connect`, `close`, `list_tools`,
 `list_resources`, `list_prompts`, `call_tool`, `read_resource`, and `get_prompt` methods.
-`examples/real_filesystem_mcp.py` is a complete executable real-server smoke test.
+Duck-typing that shape is enough; subclassing the optional `MCPAdapterBase` abstract base
+class is not required but gives you an enforced template, since a subclass that forgets a
+method fails loudly at instantiation time instead of silently no-op-ing the first time the
+runtime calls it. `examples/real_filesystem_mcp.py` is a complete executable real-server
+smoke test, and `examples/public_api_overrides.py`'s `FakeAdapter` shows the `MCPAdapterBase`
+subclassing style.
 
 ## Capability lifecycle
 

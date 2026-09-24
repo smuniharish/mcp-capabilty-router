@@ -5,7 +5,10 @@ This proves the third plugin point (after ``CapabilityRetriever`` in
 ``postgres_registry.py``): observability. ``MCPRuntime(metrics=...)`` accepts anything
 satisfying the ``MetricsHook`` protocol; the core package ships a no-op ``NullMetrics``,
 and this example supplies a real ``PrometheusMetricsHook`` instead, with zero changes to
-``MCPRuntime`` or the resilience pipeline.
+``MCPRuntime`` or the resilience pipeline. ``PrometheusMetricsHook`` subclasses the
+optional ``MetricsHookBase`` abstract base class rather than the ``MetricsHook`` protocol
+directly, so a future maintainer who forgets to implement ``record`` gets a loud
+``TypeError`` at instantiation time instead of a silently-installed no-op hook.
 
 Run:
 
@@ -30,7 +33,7 @@ from prometheus_client import Counter, start_http_server
 from tenacity import AsyncRetrying, retry_if_exception, stop_after_attempt
 
 from mcp_capability_router import MCPRuntime
-from mcp_capability_router.resilience import MetricsHook, semantic_classifier
+from mcp_capability_router.resilience import MetricsHookBase, semantic_classifier
 
 METRICS_PORT = int(os.environ.get("METRICS_PORT", "9105"))
 SERVE_SECONDS = float(os.environ.get("METRICS_SERVE_SECONDS", "120"))
@@ -42,7 +45,7 @@ _OPERATIONS_TOTAL = Counter(
 )
 
 
-class PrometheusMetricsHook(MetricsHook):
+class PrometheusMetricsHook(MetricsHookBase):
     """Adapts the runtime's ``MetricsHook`` protocol to real Prometheus counters."""
 
     async def record(self, event: str, *, attributes=None) -> None:

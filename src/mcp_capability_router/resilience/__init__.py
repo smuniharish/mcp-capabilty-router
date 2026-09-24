@@ -11,7 +11,7 @@ from .classification import (
 )
 from .fallback import FallbackHandler, FallbackPolicy, with_fallback
 from .health import HealthState, HealthTracker
-from .metrics import MetricsHook, NullMetrics
+from .metrics import MetricsHook, MetricsHookBase, NullMetrics
 from .timeout import AsyncTimeout, TimeoutPolicy, with_timeout
 
 __all__ = [
@@ -28,6 +28,7 @@ __all__ = [
     "HealthState",
     "HealthTracker",
     "MetricsHook",
+    "MetricsHookBase",
     "NullMetrics",
     "TimeoutPolicy",
     "categorize_failure",

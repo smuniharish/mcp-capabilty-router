@@ -102,6 +102,13 @@ with `npx`. Run all nine in order with:
 uv run python -m examples.public_api_overrides
 ```
 
+The in-process `FakeAdapter` used by demos 1-8 subclasses the optional `MCPAdapterBase`
+abstract base class rather than only structurally satisfying the `MCPAdapter` protocol, and
+`CountingRegistry` (demo 1) does the same for `CapabilityRegistryBase` -- both showing the
+enforced-subclass style side by side with `RecordingMetrics` (demo 3), which satisfies
+`MetricsHook` structurally with no inheritance at all, to make explicit that either style is
+a fully supported way to implement a plugin.
+
 ## Integration matrix
 
 | Scenario | Runnable locally | Adapter boundary | Suggested application hook |
@@ -111,7 +118,7 @@ uv run python -m examples.public_api_overrides
 | Real Git MCP tool | Yes, with uv/uvx and Git | `langchain-mcp-adapters` | `MCPRuntime.register_mcp_client` |
 | Real Fetch MCP tool | Yes, with uv/uvx and outbound HTTPS access | `langchain-mcp-adapters` | `MCPRuntime.register_mcp_client` |
 | One real MCP server | No credentials supplied | `langchain-mcp-adapters` | `MCPRuntime.register_server` |
-| Model-assisted selection | No model configured | LangChain model | `retrieve` â†’ `model.ainvoke` |
+| Model-assisted selection | No model configured | LangChain model | `retrieve` -> `model.ainvoke` |
 | Stateful agent workflow | No graph configured | LangGraph node | `query`/`execute` in a node |
 | Dynamic server registration from a tool result | Yes, credential-free | in-process fake adapter | `MCPRuntime.register_server` after a prior `execute` |
 | Query-driven refresh | Yes, with Node.js | real Everything MCP via `MultiServerMCPClient` | `RefreshPolicy(on_query_miss=True)` + ordinary `MCPRuntime.query(...)` |
@@ -177,10 +184,9 @@ They configure the client to raise MCP tool errors, so launch, package-installat
 errors remain visible and return a nonzero status rather than being silently treated as
 successful smoke tests.
 
-### Verified in this environment
+### Example output
 
-All five real MCP smoke tests were executed for real in this development environment (not
-simulated), with the following captured results:
+All five MCP smoke tests below run against real MCP servers (not simulated):
 
 ```text
 uv run python -m examples.real_filesystem_mcp
@@ -201,40 +207,35 @@ uv run python -m examples.real_fetch_mcp
 [{'type': 'text', 'text': 'Failed to fetch robots.txt https://example.com/robots.txt due to a connection issue', ...}]
 ```
 
-Filesystem, Playwright, Everything, and Git executed their real tool successfully. The Fetch
-server started and made a genuine outbound HTTP attempt, but the network path in this
-particular sandboxed environment intercepts TLS in a way that `mcp-server-fetch`'s own HTTP
-client did not trust for the `robots.txt` preflight request; this is an environment/network
-constraint, not a router or adapter defect. On a machine with standard outbound HTTPS access,
-the fetch call succeeds the same way the other four did.
+Filesystem, Playwright, Everything, and Git execute their tool successfully. The Fetch server
+starts and makes an outbound HTTP attempt, but on networks that intercept outbound TLS,
+`mcp-server-fetch`'s own HTTP client may not trust the interception certificate for the
+`robots.txt` preflight request -- a network constraint, not a router or adapter defect. On a
+machine with standard outbound HTTPS access, the fetch call succeeds the same way the other four
+do.
 
-`uvx`-launched servers (Git, Fetch) required `--system-certs` in this environment's local
-certificate setup; remove that argument if your environment does not need it.
+!!! note "Known environment-specific exceptions"
+    A few examples depend on external services or network conditions outside the router's
+    control:
 
-### Re-verified after the refresh-engine/tenacity/aiolimiter migration
+    - `real_fetch_mcp.py` fails on networks that TLS-intercept outbound HTTPS, as described above.
+    - `postgres_registry.py`, `vector_retrieval_qdrant.py`, `embedding_ollama.py` require the
+      Podman-hosted Postgres/Qdrant/Ollama instances documented in
+      [Pluggability proofs](#pluggability-proofs-registry-embeddings-and-metrics) below; without
+      them running, each fails with a plain connection-refused error.
+    - `langgraph_swarm_network.py` depends on OpenAI-compatible `messages.role` handling in the
+      configured LLM backend; some backends reject `name` on non-tool messages during the
+      `langgraph-swarm` handoff sequence (`Invalid value for 'messages.2': name is valid only for
+      tool messages`), which is a backend/`langchain-openai` serialization compatibility issue
+      unrelated to `MCPRuntime` or the resilience pipeline.
 
-The full example suite (every script under `examples/`, including every real-LLM and real-MCP
-script above) was re-run end-to-end after `MCPRuntime`'s refresh subsystem moved onto
-[`refresh-engine`](https://pypi.org/project/refresh-engine/) and its retry/rate-limiting stages
-moved onto `tenacity`/`aiolimiter`. All of them passed except the following, none of which are
-caused by that migration:
-
-- `real_fetch_mcp.py` -- same pre-existing TLS interception in this sandbox described above.
-- `postgres_registry.py`, `vector_retrieval_qdrant.py`, `embedding_ollama.py` -- these require
-  the Podman-hosted Postgres/Qdrant/Ollama instances documented in
-  [Pluggability proofs](#pluggability-proofs-registry-embeddings-and-metrics) below, which are
-  not running in this environment; each fails with a plain connection-refused error rather than
-  any router or adapter defect.
-- `langgraph_swarm_network.py` -- the configured LLM backend for this run rejected one message
-  in the `langgraph-swarm` handoff sequence with `Invalid value for 'messages.2': name is valid
-  only for tool messages`, an incompatibility between that backend's OpenAI-compatible API and
-  `langchain-openai`'s message serialization, unrelated to `MCPRuntime`, the refresh migration,
-  or the resilience pipeline.
+    `uvx`-launched servers (Git, Fetch) may require `--system-certs` depending on your local
+    certificate setup; omit that argument if your environment does not need it.
 
 ### Multi-server, multi-agent, and multi-capability selection
 
-Three additional real-MCP scenarios were run for real in this environment, beyond one-server /
-one-capability smoke tests:
+Three additional real-MCP scenarios go beyond one-server / one-capability smoke tests:
+
 
 ```text
 uv run python -m examples.real_multi_mcp_single_agent
@@ -267,13 +268,13 @@ that around: two independently created agents, each restricted to its own real M
 `StateGraph`. `real_multi_capability_selection.py` uses the Everything MCP server's thirteen
 tools and seven document resources to show `retrieve()` returning multiple candidates of each
 type and the workflow executing/reading more than one of each, rather than narrowing to a single
-match. Fixing this also uncovered and fixed a real bug: `LangChainMCPAdapter.list_resources()`
-previously returned raw `langchain_core.documents.Blob` objects with no `uri`/`name` fields that
-`discover_server()` could read, so `discover_resources=True` silently produced empty-named
-resource capabilities; it now maps each `Blob`'s `metadata['uri']` into the plain
-`{uri, name, description}` shape discovery expects, and `read_resource()` decodes blob content
-to a string instead of returning the raw list. Both are covered by
-`tests/test_langchain_mcp_adapter.py`.
+match.
+
+!!! note "Resource shape over `langchain-mcp-adapters`"
+    `LangChainMCPAdapter.list_resources()` normalizes each underlying
+    `langchain_core.documents.Blob` into the `{uri, name, description}` shape that
+    `discover_server()` expects, reading the URI from `Blob.metadata['uri']`. `read_resource()`
+    returns decoded string content rather than the raw `Blob`.
 
 ### Playwright MCP notes
 
@@ -286,38 +287,37 @@ regardless of outbound network policy.
 
 Each routed `execute()` call here invokes the tool through `langchain-mcp-adapters`' default
 (non-persistent) session handling, so browser state such as the currently open page is not
-guaranteed to carry over between separate `execute()` calls -- this was a genuine, observed
-behavior in this environment (a `browser_snapshot` call issued after a separate
-`browser_navigate` call landed on `about:blank`). The example therefore demonstrates two
-independent, self-contained navigations rather than a navigate-then-snapshot chain.
+guaranteed to carry over between separate `execute()` calls (a `browser_snapshot` call issued
+after a separate `browser_navigate` call can land on `about:blank`). The example therefore
+demonstrates two independent, self-contained navigations rather than a navigate-then-snapshot
+chain.
 
 ## Pluggability proofs: registry, embeddings, and metrics
 
-Beyond retrieval (`vector_retrieval_qdrant.py`), four more extension points were verified for
-real, hands-on, against Podman-hosted infrastructure, with no mocks or simulated output. Full
-walkthroughs, commands, and captured results (including real Grafana screenshots) live in
+Beyond retrieval (`vector_retrieval_qdrant.py`), four more extension points are verified
+hands-on against Podman-hosted infrastructure, with no mocks or simulated output. Full
+walkthroughs, commands, and captured results (including Grafana screenshots) live in
 [Agent integrations](../guides/agent-integrations.md):
 
 - **`postgres_registry.py`** -- the `CapabilityRegistry` protocol backed by a real Postgres
   instance; persistence proven via a second, independent registry connection re-reading the same
   rows.
-- **`embedding_ollama.py`** -- `QdrantCapabilityRetriever`'s `embed_fn` swapped for a real,
+- **`embedding_ollama.py`** -- `QdrantCapabilityRetriever`'s `embed_fn` swapped for a
   locally-hosted Ollama embedding model (`local-minilm`, 384-dim), reusing the same retriever
-  class from `vector_retrieval_qdrant.py` unchanged. Includes an honest account of a genuine
-  corporate network policy block on `registry.ollama.ai` and HuggingFace's model-resolve endpoint,
-  and the GitHub-hosted GGUF workaround used instead.
+  class from `vector_retrieval_qdrant.py` unchanged. Covers restricted-network setups where
+  `registry.ollama.ai` and Hugging Face's model-resolve endpoint are blocked, with a
+  GitHub-hosted GGUF workaround.
 - **`metrics_prometheus.py`** -- the `MetricsHook` protocol backed by a real
-  `prometheus_client` counter, scraped by a real Prometheus container and visualized in a real
-  Grafana dashboard (all three on one Podman network). Includes a genuine, documented Grafana
-  finding: its bundled `prometheus` datasource plugin can be broken by a failed background
-  auto-update in offline/restricted-network environments, fixed with
-  `GF_PLUGINS_PREINSTALL_DISABLED=true`.
-- **`metrics_prometheus_real_llm.py`** -- the same Prometheus/Grafana wiring, re-verified with a
-  real `create_agent` LLM agent driving a real Filesystem MCP server instead of scripted
+  `prometheus_client` counter, scraped by a Prometheus container and visualized in a Grafana
+  dashboard (all three on one Podman network). Covers a Grafana bundled-plugin caveat: its
+  `prometheus` datasource plugin can be broken by a failed background auto-update on
+  offline/restricted networks, fixed with `GF_PLUGINS_PREINSTALL_DISABLED=true`.
+- **`metrics_prometheus_real_llm.py`** -- the same Prometheus/Grafana wiring, driven by a real
+  `create_agent` LLM agent talking to a real Filesystem MCP server instead of scripted
   fake-adapter traffic, and a richer `ObservabilityMetricsHook` exporting per-server health,
   capabilities discovered by type, per-server refresh outcomes, and operation latency -- a
-  five-panel dashboard, not a single flat counter -- so it reflects genuine LLM tool selection and
-  execution as well as the metrics developers actually reach for in production.
+  five-panel dashboard, not a single flat counter -- reflecting the metrics developers actually
+  reach for in production.
 
 None of these four required any change to `MCPRuntime` or the router core -- each is a drop-in
 implementation of an existing protocol (`CapabilityRegistry`, the retriever's `embed_fn`, and

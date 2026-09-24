@@ -60,13 +60,12 @@ ordinary `query(...)` calls refresh that server automatically after a cache miss
 starts a runtime-owned `refresh_engine.AsyncScheduler`, and each item from `change_events`
 triggers an event-driven refresh. The event source may be an `asyncio.Queue` or any async
 iterable. `mode` is the `refresh_engine.RefreshMode` these automatic triggers run under
-(`FULL` by default, matching this project's historical discover-then-reconcile behavior).
+(`FULL` by default: discover, then reconcile against the last known state).
 
-Registration remains lazy when no policy is supplied: `MCPRuntime` still builds a
-`RefreshEngine` for every registered server, just with no automatic triggers attached.
-Explicit `refresh_server`, `refresh`, and the backwards-compatible
-`query(..., refresh_servers=[...])` hint remain available when an application needs one-off
-control, and now also accept `mode=`/`resource_ids=`:
+Registration is lazy when no policy is supplied: `MCPRuntime` builds a `RefreshEngine` for
+every registered server, with no automatic triggers attached until one is configured.
+`refresh_server`, `refresh`, and `query(..., refresh_servers=[...])` give an application
+explicit, one-off control, and accept `mode=`/`resource_ids=`:
 
 ```python
 from refresh_engine import RefreshMode
@@ -94,10 +93,10 @@ A refresh connects through the application's adapter, lists capabilities, finger
 (`refresh_engine.CompositeHash`, which canonicalizes the `Capability` dataclass directly with
 no manual serialization), and diffs the result against the last known state. `REFRESH` actions
 call `registry.upsert_many([capability])` one capability at a time; `DELETE` actions -- issued
-for previously tracked capabilities discovery no longer reports -- call
-`registry.remove(capability_id)`. `CapabilityRegistry` implementations must provide both
-`upsert_many` and the single-item `remove` (plus the pre-existing bulk `remove_missing`, still
-used by `unregister_server` and available for direct application use).
+for tracked capabilities discovery no longer reports -- call `registry.remove(capability_id)`.
+`CapabilityRegistry` implementations must provide both `upsert_many` and the single-item
+`remove`, plus the bulk `remove_missing` used by `unregister_server` (also available directly
+to applications).
 
 `refresh_server`/`refresh`/`query` return (or await) a `refresh_engine.RefreshResult`. Its
 `status` is one of:
@@ -142,6 +141,4 @@ failed background refresh is logged with its server and trigger, retains last-kn
 records, and does not terminate future interval/event processing.
 
 Choose intervals using server change frequency, credentials, maintenance windows, and quota.
-Avoid treating retrieval as authorization: apply policy after selecting a capability and before
-invoking it.
 

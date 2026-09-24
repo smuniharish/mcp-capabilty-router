@@ -10,10 +10,13 @@ server only when an operation needs it.
 
 ## Start here
 
-1. Run the [real MCP examples](examples/overview.md), starting with the Filesystem MCP smoke test.
-2. Read [Architecture](architecture/overview.md) and [Concepts](concepts/overview.md) before
-   choosing a registry.
-3. Follow [Getting started](guides/getting-started.md) to connect an application-owned adapter.
+1. Follow [Getting started](guides/getting-started.md) to install the package and run a minimal
+   application.
+2. Read [Concepts](concepts/overview.md) and [Architecture](architecture/overview.md) to
+   understand the capability model and isolation guarantees before choosing a registry.
+3. Browse the [examples](examples/overview.md) -- starting with the Filesystem MCP smoke test --
+   for runnable code covering real MCP servers, LangGraph/DeepAgents integrations, and pluggable
+   backends.
 4. Use the [API reference](reference/api.md) and
    [Troubleshooting](troubleshooting/overview.md) while integrating.
 

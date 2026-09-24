@@ -17,9 +17,18 @@ flowchart TB
     RuntimeA -.no shared mutable state.- RuntimeB
 ```
 
-No process-wide registry, breaker, or task exists: everything a runtime uses is owned by that
-runtime instance and is torn down when it closes. Two runtimes never observe each other's
-capabilities, health, or in-flight work, even when both run in the same process.
+## Isolation
+
+Each `MCPRuntime` owns its registry, adapter connections, caches, locks, semaphores, health, and
+background tasks. No process-wide registry, breaker, or task exists: everything a runtime uses is
+torn down when it closes. Two runtimes never observe each other's capabilities, health, or
+in-flight work, even when both run in the same process.
+
+Choose a runtime boundary -- tenant, agent, or trust boundary -- before registering servers, and
+do not share a mutable runtime across unrelated ones. Closing a runtime cancels its tracked
+refresh work, closes its adapters, closes its registry and loader resources, and clears its
+server and breaker state. It does not manage resources that the application did not hand to an
+adapter.
 
 ## Credentials
 
@@ -42,13 +51,3 @@ running it; the router does not sandbox a subprocess.
 Retrieval is not authorization. Before execution, applications should enforce server, capability,
 tenant, user, and argument policy. The selected capability ID and server ID are safe audit
 identifiers; raw tokens and authorization headers are not.
-
-## Isolation
-
-Each `MCPRuntime` owns its registry, adapter connections, caches, locks, semaphores, health, and
-background tasks. Do not share a mutable runtime across unrelated security or tenant boundaries.
-
-Choose a runtime boundary before registering servers. Closing a runtime cancels its tracked
-refresh work, closes its adapters, closes its registry and loader resources, and clears its
-server and breaker state. It does not manage resources that the application did not give to an
-adapter.

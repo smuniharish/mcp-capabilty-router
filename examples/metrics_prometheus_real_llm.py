@@ -51,7 +51,7 @@ from refresh_engine import RefreshResult
 
 from mcp_capability_router import MCPRuntime
 from mcp_capability_router.models import CapabilityType
-from mcp_capability_router.resilience import HealthState, MetricsHook
+from mcp_capability_router.resilience import HealthState, MetricsHookBase
 
 METRICS_PORT = int(os.environ.get("METRICS_PORT", "9105"))
 SERVE_SECONDS = float(os.environ.get("METRICS_SERVE_SECONDS", "120"))
@@ -96,8 +96,12 @@ _HEALTH_SCORE: Mapping[HealthState, int] = {
 }
 
 
-class ObservabilityMetricsHook(MetricsHook):
+class ObservabilityMetricsHook(MetricsHookBase):
     """Adapts the runtime's ``MetricsHook`` protocol to production-shaped metrics.
+
+    Subclasses the optional ``MetricsHookBase`` abstract base class (rather than the
+    ``MetricsHook`` protocol directly) so that ``record`` is enforced: a subclass that
+    forgets to implement it fails at instantiation time instead of silently no-op-ing.
 
     ``record()`` is called automatically by the resilience pipeline for every
     operation/retry event and covers latency, throughput, and health. Capability

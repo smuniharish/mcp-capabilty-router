@@ -48,6 +48,7 @@ from mcp_capability_router import (
     CapabilityReranker,
     CapabilityType,
     DeterministicRetriever,
+    MCPAdapterBase,
     MCPRuntime,
     RefreshPolicy,
     RerankingRetriever,
@@ -57,9 +58,14 @@ from mcp_capability_router.resilience import semantic_classifier
 T = TypeVar("T")
 
 
-class FakeAdapter:
+class FakeAdapter(MCPAdapterBase):
     """A minimal in-process MCP adapter with a few named tools, for override demos that
-    don't need a real MCP server (the final demo below uses a real one instead)."""
+    don't need a real MCP server (the final demo below uses a real one instead).
+
+    Subclasses the optional ``MCPAdapterBase`` abstract base class rather than just
+    structurally satisfying the ``MCPAdapter`` protocol, to demonstrate that recommended
+    style (see ``examples/postgres_registry.py``/``examples/custom_registry.py`` for the
+    same ABC-vs-structural-typing choice applied to ``CapabilityRegistry``)."""
 
     def __init__(self, names: Sequence[str], fail_times: int = 0, sleep_seconds: float = 0.0):
         self._names = names
