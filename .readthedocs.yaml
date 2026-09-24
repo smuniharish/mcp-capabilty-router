@@ -8,7 +8,7 @@ build:
       - curl -LsSf https://astral.sh/uv/install.sh | sh
     post_install:
       - $HOME/.local/bin/uv sync --extra docs
-  commands:
     build:
-      html: $HOME/.local/bin/uv run mkdocs build --site-dir $READTHEDOCS_OUTPUT/html
+      html:
+        - $HOME/.local/bin/uv run mkdocs build --site-dir $READTHEDOCS_OUTPUT/html
 
