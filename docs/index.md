@@ -17,7 +17,9 @@ server only when an operation needs it.
 3. Browse the [examples](examples/overview.md) -- starting with the Filesystem MCP smoke test --
    for runnable code covering real MCP servers, LangGraph/DeepAgents integrations, and pluggable
    backends.
-4. Use the [API reference](reference/api.md) and
+4. Read [Agent Skills](guides/agent-skills.md) for the canonical agent instructions used to
+   integrate and debug the runtime with coding agents and IDE tooling.
+5. Use the [API reference](reference/api.md) and
    [Troubleshooting](troubleshooting/overview.md) while integrating.
 
 ```mermaid
