@@ -24,6 +24,7 @@ nav:
   - Concepts: concepts/overview.md
   - Guides:
       - Getting started: guides/getting-started.md
+      - Agent Skills: guides/agent-skills.md
       - Agent integrations: guides/agent-integrations.md
   - Examples: examples/overview.md
   - API reference: reference/api.md
