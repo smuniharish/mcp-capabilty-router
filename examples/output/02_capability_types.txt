@@ -1,0 +1,14 @@
+prompt   billing:prompt:explain_invoice
+resource billing:resource:billing://policies/refunds
+tool     billing:tool:issue_refund
+tool     billing:tool:list_invoices
+
+tool issue_refund is destructive: {'destructive_hint': True}
+refund: {'invoice_id': 'inv-1', 'refunded': 200}
+
+refund-policy (text/markdown):
+# Refunds
+Paid invoices can be refunded within 30 days.
+
+prompt arguments: ['invoice_id']
+user: Explain invoice inv-2 in plain words.

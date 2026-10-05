@@ -1,0 +1,41 @@
+flowchart TB
+    subgraph application["Your application"]
+        direction LR
+        agents["<b>LangChain agents</b><br/>CapabilityRoutingMiddleware<br/>create_agent · Deep Agents"]
+        workflows["<b>LangGraph workflows</b><br/>retrieve · execute<br/>read_resource · get_prompt"]
+        code["<b>Application code</b><br/>register · refresh<br/>health · close"]
+            agents ~~~ workflows ~~~ code
+        end
+
+    subgraph runtime["MCPRuntime · one per tenant or trust boundary"]
+        direction LR
+        refresh["<b>Discovery and refresh</b><br/>a refresh-engine per server<br/>policies · fingerprints"]
+        registry["<b>CapabilityRegistry</b><br/>tool, resource, and<br/>prompt metadata"]
+        retriever["<b>CapabilityRetriever</b><br/>keywords or embeddings"]
+        pipeline["<b>Resilience pipeline</b><br/>concurrency · interceptors · breaker<br/>retry · rate limit · timeout"]
+        refresh -- reconciles --> registry
+        retriever -- ranks --> registry
+        refresh -- discovers through --> pipeline
+    end
+
+    subgraph servers["MCP servers · connected on first use"]
+        direction LR
+        adapter["<b>MCPAdapter</b><br/>FastMCPAdapter or your own"]
+        remote["<b>Remote servers</b><br/>Streamable HTTP · SSE"]
+        local["<b>Local servers</b><br/>stdio · in-process FastMCP"]
+        adapter --> remote
+        adapter --> local
+    end
+
+    application -- "query · execute<br/>read · render" --> runtime
+    runtime -- "every server operation" --> servers
+
+    classDef core fill:#ede7f6,stroke:#5e35b1,color:#311b92
+    classDef app fill:#fff8e1,stroke:#f9a825,color:#4e342e
+    classDef external fill:#e0f2f1,stroke:#00897b,color:#004d40
+    class refresh,registry,retriever,pipeline core
+    class agents,workflows,code app
+    class adapter,remote,local external
+    style application fill:none,stroke:#f9a825,stroke-dasharray:6 4,color:#f9a825
+    style runtime fill:none,stroke:#7e57c2,stroke-dasharray:6 4,color:#7e57c2
+    style servers fill:none,stroke:#26a69a,stroke-dasharray:6 4,color:#26a69a

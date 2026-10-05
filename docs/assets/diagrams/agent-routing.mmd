@@ -1,0 +1,25 @@
+sequenceDiagram
+    autonumber
+    participant A as Agent loop
+    participant M as CapabilityRoutingMiddleware
+    participant L as Chat model
+    participant R as MCPRuntime
+    participant S as MCP server
+
+    A->>M: before each model call
+    M->>R: query(latest user message, type=TOOL, limit)
+    R->>R: rank the registry, without calling any server
+    opt nothing matches
+        R->>S: refresh the servers that allow it
+        S-->>R: tools, resources, and prompts
+        R->>R: rank again
+    end
+    R-->>M: the best matching tools
+    M->>L: request with the routed tools added
+    L-->>A: AI message with a tool call
+    A->>M: run the tool call
+    M->>R: execute(capability ID, arguments)
+    R->>S: call the tool through the resilience pipeline
+    S-->>R: result or error
+    R-->>M: ToolMessage
+    M-->>A: ToolMessage, or an error message the model can act on

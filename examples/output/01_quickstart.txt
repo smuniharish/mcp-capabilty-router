@@ -1,0 +1,2 @@
+best match: crm:tool:search_customers
+result: [{'id': 'c-100', 'name': 'Acme Corp', 'email': 'ops@acme.example', 'plan': 'enterprise'}]

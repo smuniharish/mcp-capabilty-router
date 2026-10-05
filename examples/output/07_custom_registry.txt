@@ -1,0 +1,4 @@
+implements CapabilityRegistry: True
+first process stored 4 capabilities
+after a restart, without refreshing: crm:tool:update_customer_email
+input schema survives: ['customer_id', 'email']

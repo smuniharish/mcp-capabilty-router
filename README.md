@@ -1,124 +1,179 @@
-# MCP Capability Router
+# mcp-capability-router
 
-[![CI](https://github.com/smuniharish/mcp-capabilty-router/actions/workflows/ci.yml/badge.svg)](https://github.com/smuniharish/mcp-capabilty-router/actions/workflows/ci.yml)
-[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/release/python-3120/)
-[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
-[![Docs](https://img.shields.io/badge/docs-mkdocs--material-blueviolet)](docs/index.md)
+[![PyPI](https://img.shields.io/pypi/v/mcp-capability-router)](https://pypi.org/project/mcp-capability-router/)
+[![Python](https://img.shields.io/pypi/pyversions/mcp-capability-router)](https://pypi.org/project/mcp-capability-router/)
+[![CI](https://github.com/smuniharish/mcp-capabilty-router/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/smuniharish/mcp-capabilty-router/actions/workflows/ci.yml)
+[![Documentation](https://readthedocs.org/projects/mcp-capabilty-router/badge/?version=latest)](https://mcp-capabilty-router.readthedocs.io/en/latest/)
+[![License](https://img.shields.io/pypi/l/mcp-capability-router)](https://github.com/smuniharish/mcp-capabilty-router/blob/HEAD/LICENSE)
 
-**An async-first, runtime-isolated capability routing layer for LangChain, LangGraph, and
-`langchain-mcp-adapters`.**
+**Give every agent the right MCP tools, resources, and prompts, from any number of
+servers, through one resilient runtime.**
 
-Model Context Protocol (MCP) servers can expose hundreds or thousands of tools, resources, and
-prompts. Loading all of that into an agent's context on every turn is slow, expensive, and drowns
-out the model's ability to pick the right capability. `mcp-capability-router` sits between your
-agent and your MCP servers: it discovers and indexes capability metadata cheaply, retrieves only
-the handful relevant to a query, and connects to a server lazily -- only when an operation
-actually needs it.
+mcp-capability-router is an asyncio-first Python library that sits between your
+LangChain or LangGraph agents and your MCP servers. It discovers what each server
+offers, keeps that catalog current, ranks it against each request, and runs every
+server operation through concurrency limits, circuit breakers, retries, rate limits,
+and timeouts. An agent sees only the few tools that matter for the current turn,
+however many servers and tools you register.
 
-## Why this exists
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/smuniharish/mcp-capabilty-router/HEAD/docs/assets/diagrams/architecture-dark.png">
+  <img alt="Applications and agents use the MCPRuntime, which discovers, ranks, and calls the capabilities of MCP servers through a resilience pipeline" src="https://raw.githubusercontent.com/smuniharish/mcp-capabilty-router/HEAD/docs/assets/diagrams/architecture-light.png">
+</picture>
 
-Connect an agent to a handful of MCP servers and the naive approach -- fetch every tool, resource,
-and prompt from every server at startup and hand the whole catalog to the model -- works fine.
-Connect it to a dozen servers, or a handful of servers that each expose hundreds of tools, and that
-same approach quietly breaks in three ways at once:
+## Features
 
-1. **Every turn pays for capabilities that are never used.** Tool schemas alone can dwarf the
-   actual conversation, burning context budget and latency before the model has read a single
-   user message, and a bigger tool list makes the model *worse* at picking the right one, not
-   better.
-2. **Every server connection becomes a shared point of failure.** One slow or flaky MCP server,
-   connected at startup, blocks or degrades every agent that touches the process -- and most
-   teams end up hand-rolling retry loops, circuit breakers, and rate limiters around each
-   server's adapter, ad hoc, in application code that has nothing to do with agent logic.
-3. **The registry and the transport get welded together.** Swapping an in-memory tool list for
-   Postgres, or a keyword search for vector retrieval, means touching the same code that owns
-   connections, retries, and health -- so most implementations never get swapped at all.
-
-`mcp-capability-router` exists to make the *scalable* path the default path, without reinventing
-MCP transport or agent orchestration:
-
-- **Discover cheaply, load lazily.** Registering a server stores a factory, not a connection.
-  Discovery indexes metadata for tools, resources, and prompts -- all three as first-class,
-  equally-routable capabilities -- so a registry can hold thousands of records while an agent
-  turn only ever touches the handful `retrieve()` actually returns. A server connection is opened
-  only when `execute`, `read_resource`, or `get_prompt` needs one.
-- **Borrow resilience instead of reinventing it.** Retry, rate limiting, circuit breaking,
-  bulkheads, timeouts, and fallbacks are wired in by default, on top of maintained libraries --
-  [`refresh-engine`](https://pypi.org/project/refresh-engine/) for per-server discovery
-  reconciliation, [`tenacity`](https://pypi.org/project/tenacity/) for retries, and
-  [`aiolimiter`](https://pypi.org/project/aiolimiter/) for rate limiting -- so one misbehaving
-  server degrades gracefully instead of taking the whole agent down, and nobody has to hand-write
-  that logic per adapter again.
-- **Keep every seam swappable.** The capability registry, the retriever, and the metrics hook are
-  small, explicit protocols, isolated from connection and lifecycle handling. Start with the
-  built-in in-memory registry and keyword retriever, then drop in Postgres, Qdrant, Ollama
-  embeddings, or Prometheus later -- with zero changes to `MCPRuntime` or the resilience pipeline.
-- **Stay a router, not a runtime.** This project owns capability discovery, retrieval, and
-  lifecycle policy only. Transport, authentication, and the MCP client itself stay with
-  `langchain-mcp-adapters` or your own adapter; model calls and agent orchestration stay with
-  LangChain, LangGraph, `langgraph-swarm`, or DeepAgents. Nothing here competes with those layers.
+- **Only the relevant tools.** Retrieval selects the capabilities that match each
+  request, so models stay fast, inexpensive, and accurate with thousands of tools.
+  Keyword retrieval needs no model; embedding retrieval works with any LangChain
+  embedding model and reranker.
+- **Every MCP server.** Streamable HTTP, SSE, stdio, MCP configurations, and
+  in-process servers through [FastMCP](https://gofastmcp.com), with lazy connections
+  and automatic reconnection.
+- **Always current.** Discovery runs on registration, on a schedule, on
+  `list_changed` notifications, or when a query finds nothing, and writes only what
+  changed, through [refresh-engine](https://refresh-engine.readthedocs.io).
+- **Resilient by default.** Concurrency limits, interceptors, circuit breakers per
+  server and operation, retries, rate limits, and timeouts, built on
+  [purgatory](https://pypi.org/project/purgatory/),
+  [tenacity](https://tenacity.readthedocs.io), and
+  [aiolimiter](https://aiolimiter.readthedocs.io). Failures are classified, so a
+  rejected tool call is never repeated and never opens a circuit.
+- **Built for LangChain.** Agent middleware for `create_agent`, Deep Agents, and
+  multi-agent systems, LangChain tools for LangGraph, and compatibility with
+  LangChain's human-in-the-loop middleware.
+- **Isolated and observable.** One runtime per tenant shares nothing with others.
+  Health states, metrics for every operation, and standard logging.
+- **Typed and extensible.** Fully type-annotated, with protocols for registries,
+  retrievers, adapters, and interceptors.
 
 ## Installation
 
-This package is not yet published to PyPI. Install it from source:
+mcp-capability-router requires Python 3.12 or newer.
 
 ```bash
-git clone https://github.com/smuniharish/mcp-capabilty-router.git
-cd mcp-capabilty-router
-pip install .
+pip install mcp-capability-router
 ```
 
-Optional extras add integration-specific dependencies as needed:
+## Quick start
 
-```bash
-pip install ".[mcp]"       # langchain-mcp-adapters
-pip install ".[langgraph]" # LangGraph
-pip install ".[agents]"    # LangChain create_agent, DeepAgents
-pip install ".[swarm]"     # langgraph-swarm
-```
+Register a server, let the runtime discover its capabilities, and route a request to
+the right tool:
 
-Requires Python 3.12.
-
-## Quickstart
-
+<!-- test -->
 ```python
 import asyncio
-from mcp_capability_router import CapabilityType, MCPRuntime
 
-async def main():
+from fastmcp import FastMCP
+
+from mcp_capability_router import MCPRuntime, RefreshPolicy
+
+weather = FastMCP("weather")
+
+
+@weather.tool
+def get_forecast(city: str) -> str:
+    """Get the weather forecast for a city."""
+    return f"Sunny and 24 degrees in {city}"
+
+
+@weather.tool
+def list_alerts(region: str) -> list[str]:
+    """List the active severe-weather alerts of a region."""
+    return []
+
+
+async def main() -> None:
     async with MCPRuntime() as runtime:
-        await runtime.register_server("filesystem", my_filesystem_adapter_factory)
-        await runtime.refresh_server("filesystem")
+        await runtime.register_mcp(
+            "weather", weather, refresh=RefreshPolicy(on_register=True)
+        )
+        [tool] = await runtime.retrieve("What is the forecast for Paris?", limit=1)
+        print(tool.capability_id)
 
-        candidates = await runtime.retrieve("read a file", type=CapabilityType.TOOL, limit=5)
-        result = await runtime.execute(candidates[0].capability_id, {"path": "notes.txt"})
-        print(result)
+        message = await runtime.execute(tool.capability_id, {"city": "Paris"})
+        print(message.text)
+
 
 asyncio.run(main())
 ```
 
-See [Getting started](docs/guides/getting-started.md) for wiring in a real
-`langchain-mcp-adapters` client, and [Examples](docs/examples/overview.md) for runnable scripts
-covering real MCP servers, LangGraph/DeepAgents/`langgraph-swarm` integrations, and pluggable
-registries, retrievers, and metrics backends.
+```text
+weather:tool:get_forecast
+Sunny and 24 degrees in Paris
+```
+
+The server here runs in process; a URL, a script path, or an MCP configuration works
+the same way.
+
+## Route tools for an agent
+
+Add the middleware to a LangChain agent, and every model call receives the tools that
+match the latest user message. Tool calls run through the runtime:
+
+```python
+from langchain.agents import create_agent
+
+from mcp_capability_router import CapabilityRoutingMiddleware
+
+agent = create_agent(
+    "openai:gpt-5.4-mini",
+    tools=[],
+    middleware=[CapabilityRoutingMiddleware(runtime, limit=5)],
+)
+result = await agent.ainvoke(
+    {"messages": [{"role": "user", "content": "What is the forecast for Paris?"}]}
+)
+```
+
+Continue with the
+[getting started guide](https://mcp-capabilty-router.readthedocs.io/en/latest/getting-started/)
+to add resilience, refresh policies, and observability.
+
+## Performance
+
+The router's overhead is small next to real MCP calls: keyword retrieval ranks 10,000
+capabilities in about 10 milliseconds, and an operation passes through the whole
+resilience pipeline in a few microseconds. See
+[Performance](https://mcp-capabilty-router.readthedocs.io/en/latest/guides/performance/)
+for the measurements and tuning advice.
 
 ## Documentation
 
-Full documentation -- architecture, concepts, guides, operations, API reference, and
-troubleshooting -- lives in [`docs/`](docs/index.md) and is built with MkDocs Material.
+The [documentation](https://mcp-capabilty-router.readthedocs.io/en/latest/) covers:
+
+- [Getting started](https://mcp-capabilty-router.readthedocs.io/en/latest/getting-started/)
+  and [concepts](https://mcp-capabilty-router.readthedocs.io/en/latest/concepts/)
+- [Guides](https://mcp-capabilty-router.readthedocs.io/en/latest/guides/) for every
+  feature, including a
+  [production checklist](https://mcp-capabilty-router.readthedocs.io/en/latest/guides/production/)
+- [Runnable examples](https://mcp-capabilty-router.readthedocs.io/en/latest/examples/),
+  from a quick start to LangGraph workflows, Deep Agents, and PostgreSQL registries
+- The [API reference](https://mcp-capabilty-router.readthedocs.io/en/latest/api/)
+- The [architecture](https://mcp-capabilty-router.readthedocs.io/en/latest/architecture/overview/)
+  and its guarantees
+
+## Agent Skills
+
+Coding agents such as Claude Code, Codex, Cursor, and GitHub Copilot can use the
+mcp-capability-router
+[Agent Skill](https://mcp-capabilty-router.readthedocs.io/en/latest/agent-skills/) to
+integrate the library correctly:
+
+```bash
+npx skills add https://github.com/smuniharish/mcp-capabilty-router/tree/master/mcp-capability-router-skills/skills/mcp-capability-router
+```
 
 ## Contributing
 
-```powershell
-uv sync --extra dev
-uv run pytest
-uv run ruff check .
-uv run ruff format --check .
-uv run pyrefly check
-uv run mkdocs build
-```
+Contributions are welcome. Read the
+[contributing guide](https://github.com/smuniharish/mcp-capabilty-router/blob/HEAD/CONTRIBUTING.md),
+and report vulnerabilities as described in the
+[security policy](https://github.com/smuniharish/mcp-capabilty-router/blob/HEAD/SECURITY.md).
+Notable changes are listed in the
+[changelog](https://github.com/smuniharish/mcp-capabilty-router/blob/HEAD/CHANGELOG.md).
 
 ## License
 
-Apache License 2.0 -- see [LICENSE](LICENSE).
-
+mcp-capability-router is licensed under the
+[Apache License 2.0](https://github.com/smuniharish/mcp-capabilty-router/blob/HEAD/LICENSE).

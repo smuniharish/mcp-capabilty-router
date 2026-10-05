@@ -1,19 +1,142 @@
 name: CI
+
 on:
   push:
+    branches:
+      - master
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_COLOR: "1"
+  UV_LOCKED: "1"
+
 jobs:
-  checks:
+  lint:
+    name: Lint and type check
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.12"
-      - run: uv sync --extra dev
-      - run: uv run pytest
-      - run: uv run ruff check .
+      - run: uv sync
       - run: uv run ruff format --check .
+      - run: uv run ruff check --output-format=github .
       - run: uv run pyrefly check
-      - run: uv run mkdocs build
 
+  test:
+    name: Test (Python ${{ matrix.python-version }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+        python-version:
+          - "3.12"
+          - "3.13"
+          - "3.14"
+    env:
+      HYPOTHESIS_PROFILE: ci
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: uv sync --no-default-groups --group test --group examples
+      - run: uv run --no-sync pytest --cov
+
+  examples:
+    name: Examples
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready --username postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MCP_ROUTER_EXAMPLE_POSTGRES_DSN: postgresql://postgres:postgres@localhost:5432/postgres
+      MCP_ROUTER_EXAMPLE_NODE: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: "3.12"
+      - run: uv sync
+      - run: uv run python scripts/run_examples.py
+
+  docs:
+    name: Documentation and Agent Skill
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NO_MKDOCS_2_WARNING: "true"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: "3.12"
+      - run: uv sync
+      - run: uv run python scripts/check_docs.py
+      - run: uv run python scripts/render_diagrams.py --check
+      - run: uv run mkdocs build --strict
+      - run: uvx --from skills-ref==0.1.1 agentskills validate mcp-capability-router-skills/skills/mcp-capability-router
+
+  distribution:
+    name: Distribution
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: "3.12"
+      - run: uv sync
+      - run: uv build
+      - run: uv run twine check --strict dist/*
+      - run: uv run python scripts/validate_distribution.py dist --python 3.12 --python 3.14
+
+  success:
+    name: CI success
+    if: always()
+    needs:
+      - lint
+      - test
+      - examples
+      - docs
+      - distribution
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every job to succeed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
+        run: exit 1

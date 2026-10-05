@@ -1,0 +1,23 @@
+flowchart LR
+    operation(["<b>Operation</b><br/>connect · discover<br/>call_tool · read_resource<br/>get_prompt"])
+    concurrency["<b>Concurrency limit</b><br/>max_concurrency<br/>across all servers"]
+    interceptors["<b>Interceptors</b><br/>auth · audit · policy<br/>once per operation"]
+    breaker{"<b>Circuit breaker</b><br/>per server<br/>and operation"}
+    retry["<b>Retry</b><br/>tenacity policy<br/>is_retryable"]
+    limit["<b>Rate limit</b><br/>aiolimiter<br/>each attempt"]
+    timeout["<b>Timeout</b><br/>operation_timeout<br/>each attempt"]
+    server(["<b>MCP server</b>"])
+    rejected(["<b>CircuitOpenError</b><br/>no server call"])
+
+    operation --> concurrency --> interceptors --> breaker
+    breaker -- "closed, or a trial call" --> retry --> limit --> timeout --> server
+    breaker -- open --> rejected
+
+    classDef terminal fill:#ede7f6,stroke:#5e35b1,color:#311b92
+    classDef step fill:#ffffff,stroke:#7e57c2,color:#311b92
+    classDef question fill:#fff8e1,stroke:#f9a825,color:#4e342e
+    classDef failure fill:#ffebee,stroke:#c62828,color:#b71c1c
+    class operation,server terminal
+    class concurrency,interceptors,retry,limit,timeout step
+    class breaker question
+    class rejected failure

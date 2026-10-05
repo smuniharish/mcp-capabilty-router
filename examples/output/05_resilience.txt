@@ -1,0 +1,26 @@
+  audit: discover on flaky -> ok
+  audit: discover on down -> ok
+  audit: discover on reports -> ok
+transient failures are retried:
+  audit: call_tool on flaky -> ok
+  found Globex
+
+repeated failures open the circuit:
+  audit: call_tool on down -> ServerUnavailableError
+  ServerUnavailableError: server overloaded
+  log: Circuit opened for call_tool on server 'down'
+  audit: call_tool on down -> ServerUnavailableError
+  ServerUnavailableError: server overloaded
+  audit: call_tool on down -> CircuitOpenError
+  CircuitOpenError: the circuit of call_tool on server 'down' is open
+
+slow attempts time out:
+  audit: call_tool on reports -> TimeoutError
+  TimeoutError: call_tool on server 'reports' exceeded the operation timeout of 0.2s
+
+tool errors reach the caller but leave the server healthy:
+  audit: call_tool on flaky -> ToolExecutionError
+  ToolExecutionError: Error calling tool 'update_customer_email': unknown customer c-999
+health of flaky: healthy
+health of down: unhealthy
+health of reports: degraded

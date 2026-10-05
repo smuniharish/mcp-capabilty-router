@@ -1,0 +1,5 @@
+20 servers, 10,000 capabilities
+  server-02:tool:delete_invoices_44
+  server-07:tool:delete_invoices_44
+  server-12:tool:delete_invoices_44
+delete_invoices_44 done

@@ -1,0 +1,32 @@
+flowchart TB
+    subgraph tenant_b["MCPRuntime for tenant B"]
+        direction TB
+        b_servers["servers and connections"]
+        b_registry["registry and retrieval caches"]
+        b_breakers["circuit breakers and limits"]
+        b_tasks["schedulers and background tasks"]
+        b_servers ~~~ b_registry ~~~ b_breakers ~~~ b_tasks
+    end
+
+    subgraph tenant_a["MCPRuntime for tenant A"]
+        direction TB
+        a_servers["servers and connections"]
+        a_registry["registry and retrieval caches"]
+        a_breakers["circuit breakers and limits"]
+        a_tasks["schedulers and background tasks"]
+        a_servers ~~~ a_registry ~~~ a_breakers ~~~ a_tasks
+    end
+
+    shared[("<b>Opt-in sharing</b><br/>a durable registry<br/>shared breaker storage")]
+
+    tenant_b -. "only when configured" .-> shared
+    tenant_a -. "only when configured" .-> shared
+
+    classDef tenantA fill:#ede7f6,stroke:#5e35b1,color:#311b92
+    classDef tenantB fill:#fff8e1,stroke:#f9a825,color:#4e342e
+    classDef storage fill:#e0f2f1,stroke:#00897b,color:#004d40
+    class a_servers,a_registry,a_breakers,a_tasks tenantA
+    class b_servers,b_registry,b_breakers,b_tasks tenantB
+    class shared storage
+    style tenant_a fill:none,stroke:#7e57c2,stroke-dasharray:6 4,color:#7e57c2
+    style tenant_b fill:none,stroke:#f9a825,stroke-dasharray:6 4,color:#f9a825

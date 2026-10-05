@@ -1,0 +1,5 @@
+query miss refreshed the server: crm:tool:search_customers
+change event discovered: crm:tool:merge_customers
+tools only: status=success mode=targeted refreshed=3
+one capability: refreshed=1
+nothing changed: unchanged=5
