@@ -1,0 +1,15 @@
+in-memory counters:
+  mcp_capability_router.operations{operation=call_tool,outcome=failure,server_id=billing} = 1
+  mcp_capability_router.operations{operation=call_tool,outcome=success,server_id=crm} = 1
+  mcp_capability_router.operations{operation=discover,outcome=success,server_id=billing} = 1
+  mcp_capability_router.operations{operation=discover,outcome=success,server_id=crm} = 1
+  mcp_capability_router.operations{operation=read_resource,outcome=success,server_id=billing} = 1
+  refresh_engine.refreshes{mode=incremental,server_id=billing,status=success,trigger=manual} = 1
+  refresh_engine.refreshes{mode=incremental,server_id=crm,status=success,trigger=manual} = 1
+
+Prometheus exposition (counters):
+  mcp_capability_router_operations_total{operation="discover",outcome="success",server_id="crm"} 1.0
+  mcp_capability_router_operations_total{operation="discover",outcome="success",server_id="billing"} 1.0
+  mcp_capability_router_operations_total{operation="call_tool",outcome="success",server_id="crm"} 1.0
+  mcp_capability_router_operations_total{operation="read_resource",outcome="success",server_id="billing"} 1.0
+  mcp_capability_router_operations_total{operation="call_tool",outcome="failure",server_id="billing"} 1.0

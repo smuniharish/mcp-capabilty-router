@@ -1,35 +1,44 @@
-# Byte-compiled / cache
+# Python
 __pycache__/
 *.py[cod]
-.mypy_cache/
-.pytest_cache/
-.ruff_cache/
-
-# Virtual environments
-.venv/
-venv/
-
-# uv
+*.pyd
+*.so
 .python-version
 
-# Build artifacts
-dist/
+# Environments and tools
+.venv/
+venv/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+.mypy_cache/
+.pyrefly/
+
+# Builds and documentation
 build/
+dist/
+site/
 *.egg-info/
 
-# Docs build output
-site/
-
-# Playwright MCP output (snapshots written by @playwright/mcp when run locally)
+# Local state
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
 .playwright-mcp/
 
-# Environment secrets (never commit real values)
+# Secrets
 .env
 .env.*
 !.env.example
 
-# Editor/OS
-.vscode/
+# Editors and operating systems
 .idea/
+.vscode/
 .DS_Store
 Thumbs.db

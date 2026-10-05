@@ -1,36 +1,143 @@
-# MCP Capability Router
+---
+hide:
+  - navigation
+---
 
-An async-first, runtime-isolated registry and router for MCP **tools, resources, and prompts**.
-The router keeps discovery metadata cheap, selects only relevant capabilities, and connects to a
-server only when an operation needs it.
+# mcp-capability-router
 
-!!! note
-    This project owns routing and lifecycle policy, not MCP transports, authentication, model
-    calls, or agent orchestration. Those are supplied by your adapter and application.
+**Give every agent the right MCP tools, resources, and prompts, from any number of
+servers, through one resilient runtime.**
 
-## Start here
+mcp-capability-router is an asyncio-first Python library that sits between your
+LangChain or LangGraph agents and your MCP servers. It discovers what each server
+offers, keeps that catalog current, ranks it against each request, and runs every
+server operation through concurrency limits, circuit breakers, retries, rate limits,
+and timeouts. An agent sees only the few tools that matter for the current turn,
+however many servers and tools you register.
 
-1. Follow [Getting started](guides/getting-started.md) to install the package and run a minimal
-   application.
-2. Read [Concepts](concepts/overview.md) and [Architecture](architecture/overview.md) to
-   understand the capability model and isolation guarantees before choosing a registry.
-3. Browse the [examples](examples/overview.md) -- starting with the Filesystem MCP smoke test --
-   for runnable code covering real MCP servers, LangGraph/DeepAgents integrations, and pluggable
-   backends.
-4. Read [Agent Skills](guides/agent-skills.md) for the canonical agent instructions used to
-   integrate and debug the runtime with coding agents and IDE tooling.
-5. Use the [API reference](reference/api.md) and
-   [Troubleshooting](troubleshooting/overview.md) while integrating.
+![Architecture](assets/diagrams/architecture-light.png#only-light)
+![Architecture](assets/diagrams/architecture-dark.png#only-dark)
 
-```mermaid
-flowchart LR
-    A[Application or agent] --> R[MCPRuntime]
-    R --> Q[retrieve / query]
-    Q --> C[Capability metadata]
-    R --> X[execute / read / prompt]
-    X --> L[Lazy adapter connection]
-    L --> M[MCP server]
+<div class="grid cards" markdown>
+
+-   :material-target:{ .lg .middle } **Only the relevant tools**
+
+    ---
+
+    Keyword or embedding retrieval selects the capabilities that match each
+    request, so models stay fast, inexpensive, and accurate with thousands of
+    tools.
+
+-   :material-sync:{ .lg .middle } **Always current**
+
+    ---
+
+    Discovery runs on registration, on a schedule, on change notifications, or
+    when a query finds nothing, and only what changed is written.
+
+-   :material-shield-check-outline:{ .lg .middle } **Resilient by default**
+
+    ---
+
+    Every server operation runs through a concurrency limit, interceptors, a
+    circuit breaker, retries, a rate limit, and a timeout.
+
+-   :material-robot-outline:{ .lg .middle } **Built for LangChain**
+
+    ---
+
+    Agent middleware for `create_agent` and Deep Agents, LangChain tools for
+    LangGraph, and FastMCP connectivity for every MCP transport.
+
+</div>
+
+## Install
+
+```bash
+pip install mcp-capability-router
 ```
 
-The real-server examples use local stdio MCP servers and do not require model credentials.
-Integration hooks show where `langchain-mcp-adapters`, LangChain, and LangGraph fit.
+mcp-capability-router requires Python 3.12 or newer.
+
+## A first route
+
+Register a server, let the runtime discover its capabilities, and route a request
+to the right tool:
+
+<!-- test -->
+```python
+import asyncio
+
+from fastmcp import FastMCP
+
+from mcp_capability_router import MCPRuntime, RefreshPolicy
+
+weather = FastMCP("weather")
+
+
+@weather.tool
+def get_forecast(city: str) -> str:
+    """Get the weather forecast for a city."""
+    return f"Sunny and 24 degrees in {city}"
+
+
+@weather.tool
+def list_alerts(region: str) -> list[str]:
+    """List the active severe-weather alerts of a region."""
+    return []
+
+
+async def main() -> None:
+    async with MCPRuntime() as runtime:
+        await runtime.register_mcp(
+            "weather", weather, refresh=RefreshPolicy(on_register=True)
+        )
+        [tool] = await runtime.retrieve("What is the forecast for Paris?", limit=1)
+        print(tool.capability_id)
+
+        message = await runtime.execute(tool.capability_id, {"city": "Paris"})
+        print(message.text)
+
+
+asyncio.run(main())
+```
+
+Running the program prints:
+
+```text
+weather:tool:get_forecast
+Sunny and 24 degrees in Paris
+```
+
+The server here runs in process; a URL, a script path, or an MCP configuration
+works the same way. Retrieval ranks the discovered metadata without calling the
+server, and the call runs through the resilience pipeline.
+
+## Route tools for an agent
+
+Add the middleware to a LangChain agent, and every model call receives the tools
+that match the latest user message:
+
+```python
+from langchain.agents import create_agent
+
+from mcp_capability_router import CapabilityRoutingMiddleware
+
+agent = create_agent(
+    "openai:gpt-5.4-mini",
+    tools=[],
+    middleware=[CapabilityRoutingMiddleware(runtime, limit=5)],
+)
+result = await agent.ainvoke(
+    {"messages": [{"role": "user", "content": "What is the forecast for Paris?"}]}
+)
+```
+
+## Where to go next
+
+- [Getting started](getting-started.md) builds a complete integration step by step.
+- [Concepts](concepts.md) explains capabilities, discovery, retrieval, and the
+  resilience pipeline.
+- The [guides](guides/index.md) cover each capability in depth.
+- The [examples](examples.md) show every feature in a runnable program.
+- The [API reference](api/index.md) documents every public name.

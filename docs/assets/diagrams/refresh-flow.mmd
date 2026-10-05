@@ -1,0 +1,28 @@
+flowchart LR
+    subgraph triggers["Triggers"]
+        direction TB
+        manual["<b>Manual</b><br/>refresh_server · refresh"]
+        register["<b>On register</b>"]
+        interval["<b>Interval</b><br/>fixed schedule"]
+        events["<b>Change events</b><br/>queue or async iterable"]
+        miss["<b>Query miss</b>"]
+        manual ~~~ register ~~~ interval ~~~ events ~~~ miss
+    end
+
+    engine["<b>RefreshEngine</b><br/>one per server<br/>overlap · retries · timeouts"]
+    discover["<b>Discover</b><br/>list tools, resources,<br/>and prompts"]
+    detect["<b>Detect changes</b><br/>fingerprint every<br/>capability"]
+    reconcile["<b>Reconcile</b><br/>store added and modified<br/>remove deleted"]
+    registry[("<b>CapabilityRegistry</b>")]
+    store[("<b>Refresh state</b><br/>fingerprints, in memory<br/>per registration")]
+
+    triggers --> engine --> discover --> detect --> reconcile --> registry
+    detect -. compares with .-> store
+
+    classDef core fill:#ede7f6,stroke:#5e35b1,color:#311b92
+    classDef trigger fill:#fff8e1,stroke:#f9a825,color:#4e342e
+    classDef storage fill:#e0f2f1,stroke:#00897b,color:#004d40
+    class engine,discover,detect,reconcile core
+    class manual,register,interval,events,miss trigger
+    class registry,store storage
+    style triggers fill:none,stroke:#f9a825,stroke-dasharray:6 4,color:#f9a825

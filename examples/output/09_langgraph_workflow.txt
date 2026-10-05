@@ -1,0 +1,2 @@
+billing:tool:list_invoices -> [{'id': 'inv-1', 'customer_id': 'c-100', 'amount': 1200, 'status': 'paid'}]
+crm:tool:search_customers -> [{'id': 'c-200', 'name': 'Globex', 'email': 'it@globex.example', 'plan': 'team'}]

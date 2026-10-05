@@ -1,40 +1,144 @@
-﻿site_name: MCP Capability Router
-site_description: Async capability routing for LangChain, LangGraph, and MCP adapters
-repo_name: mcp-capability-router
+site_name: mcp-capability-router
+site_description: >-
+  Asyncio-first capability routing for MCP tools, resources, and prompts in
+  LangChain and LangGraph agents.
+site_author: S. Muni Harish
+site_url: https://mcp-capabilty-router.readthedocs.io/en/latest/
+repo_url: https://github.com/smuniharish/mcp-capabilty-router
+repo_name: smuniharish/mcp-capabilty-router
+edit_uri: edit/master/docs/
+copyright: Copyright &copy; 2026 S. Muni Harish &middot; Apache License 2.0
+docs_dir: docs
+strict: true
+
+exclude_docs: |
+  *.mmd
+
 theme:
   name: material
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to system preference
   features:
-    - navigation.sections
+    - content.code.annotate
     - content.code.copy
+    - content.tabs.link
+    - navigation.footer
+    - navigation.indexes
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - search.highlight
+    - search.suggest
+    - toc.follow
+
 markdown_extensions:
   - admonition
-  - pymdownx.tabbed
-  - pymdownx.superfences:
-      custom_fences:
-        - name: mermaid
-          class: mermaid
-          format: !!python/name:pymdownx.superfences.fence_code_format
+  - attr_list
+  - def_list
+  - md_in_html
+  - tables
   - toc:
       permalink: true
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          inventories:
+            - https://docs.python.org/3/objects.inv
+          options:
+            docstring_style: google
+            docstring_options:
+              ignore_init_summary: true
+            filters: ["!^_"]
+            heading_level: 2
+            members_order: source
+            merge_init_into_class: true
+            separate_signature: true
+            show_if_no_docstring: false
+            show_root_full_path: false
+            show_root_heading: true
+            show_signature_annotations: true
+            show_source: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            signature_crossrefs: false
+
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn
+
 nav:
   - Home: index.md
+  - Getting started: getting-started.md
+  - Concepts: concepts.md
+  - Guides:
+      - guides/index.md
+      - Connecting MCP servers: guides/servers.md
+      - Retrieval: guides/retrieval.md
+      - Discovery and refresh: guides/refresh.md
+      - Resilience: guides/resilience.md
+      - Metrics, logging, and health: guides/observability.md
+      - LangChain and LangGraph agents: guides/agents.md
+      - Extending the router: guides/extending.md
+      - Isolation and security: guides/security.md
+      - Testing integrations: guides/testing.md
+      - Performance: guides/performance.md
+      - Production checklist: guides/production.md
+      - Troubleshooting: guides/troubleshooting.md
+  - Examples: examples.md
+  - API reference:
+      - api/index.md
+      - Runtime: api/runtime.md
+      - Capabilities: api/models.md
+      - Refresh policies: api/refresh.md
+      - Retrieval: api/retrieval.md
+      - Registries: api/registry.md
+      - FastMCP adapter: api/adapters.md
+      - Agent middleware: api/agents.md
+      - Extension contracts: api/contracts.md
+      - Failure classification: api/resilience.md
+      - Exceptions: api/errors.md
   - Architecture:
       - Overview: architecture/overview.md
-      - Decisions: architecture/decisions.md
-  - Concepts: concepts/overview.md
-  - Guides:
-      - Getting started: guides/getting-started.md
-      - Agent Skills: guides/agent-skills.md
-      - Agent integrations: guides/agent-integrations.md
-  - Examples: examples/overview.md
-  - API reference: reference/api.md
-  - Operations:
-      - Overview: operations/overview.md
-      - Concurrency: operations/concurrency.md
-      - Isolation and security: operations/isolation.md
-      - Refresh: operations/refresh.md
-      - Resilience: operations/resilience.md
-  - Troubleshooting: troubleshooting/overview.md
-extra_javascript:
-  - https://unpkg.com/mermaid@10/dist/mermaid.min.js
-  - javascripts/mermaid.js
+      - Request lifecycle: architecture/lifecycle.md
+  - Agent Skills: agent-skills.md
+  - Changelog: changelog.md

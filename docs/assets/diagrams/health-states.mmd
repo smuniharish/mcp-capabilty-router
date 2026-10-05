@@ -1,0 +1,9 @@
+stateDiagram-v2
+    direction LR
+    [*] --> HEALTHY
+    HEALTHY --> DEGRADED: a failure that counts
+    DEGRADED --> HEALTHY: a success
+    DEGRADED --> UNHEALTHY: threshold reached, the circuit opens
+    UNHEALTHY --> RECOVERING: the open period elapsed
+    RECOVERING --> HEALTHY: the trial call succeeds
+    RECOVERING --> UNHEALTHY: the trial call fails

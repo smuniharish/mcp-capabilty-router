@@ -1,0 +1,5 @@
+tenant A servers: ('crm',)
+capabilities before refresh: 0
+capabilities after refresh: 4
+tenant A sees: ['customer-schema', 'update_customer_email', 'search_customers', 'follow_up']
+tenant B sees: ['issue_refund', 'list_invoices', 'explain_invoice', 'refund-policy']

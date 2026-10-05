@@ -1,39 +1,104 @@
-"""MCP capability routing runtime."""
+"""Asyncio-first capability routing for MCP tools, resources, and prompts.
 
-from .embedding import CapabilityEmbedder
-from .integrations import LangChainMCPAdapter
-from .models import Capability, CapabilityType, Prompt, Resource, Tool
-from .refresh import RefreshPolicy
-from .registry import CapabilityRegistry, CapabilityRegistryBase, InMemoryRegistry
-from .reranking import CapabilityReranker, RerankingRetriever
-from .resilience import CircuitBreaker, CircuitState, MetricsHook, MetricsHookBase, with_timeout
-from .retrieval import CapabilityRetriever, CapabilityRetrieverBase, DeterministicRetriever
+Every public name is importable from this package.
+"""
+
+from .adapters import FastMCPAdapter, FastMCPTarget
+from .agents import CapabilityRoutingMiddleware
+from .contracts import (
+    CapabilityRegistry,
+    CapabilityRetriever,
+    Interceptor,
+    MCPAdapter,
+    Operation,
+    OperationContext,
+)
+from .errors import (
+    AuthenticationError,
+    AuthorizationError,
+    CapabilityNotFoundError,
+    CapabilityTypeError,
+    CircuitOpenError,
+    ConfigurationError,
+    DiscoveryError,
+    InvalidRequestError,
+    MCPCapabilityRouterError,
+    PromptRetrievalError,
+    ProtocolError,
+    RateLimitError,
+    RefreshError,
+    ResourceReadError,
+    RuntimeClosedError,
+    ServerConnectionError,
+    ServerError,
+    ServerNotFoundError,
+    ServerUnavailableError,
+    ToolExecutionError,
+)
+from .models import (
+    Capability,
+    CapabilityType,
+    HealthState,
+    Prompt,
+    PromptArgument,
+    Resource,
+    Tool,
+    make_capability_id,
+)
+from .refresh import RefreshEventSource, RefreshPolicy
+from .registry import InMemoryRegistry
+from .resilience import FailureCategory, categorize_failure, is_retryable
+from .retrieval import EmbeddingRetriever, KeywordRetriever
 from .runtime import MCPRuntime
-from .server import MCPAdapter, MCPAdapterBase
+
+__version__ = "0.2.0"
 
 __all__ = [
+    "AuthenticationError",
+    "AuthorizationError",
     "Capability",
-    "CapabilityEmbedder",
+    "CapabilityNotFoundError",
     "CapabilityRegistry",
-    "CapabilityRegistryBase",
-    "CapabilityReranker",
-    "CapabilityType",
-    "CircuitBreaker",
-    "CircuitState",
     "CapabilityRetriever",
-    "CapabilityRetrieverBase",
-    "DeterministicRetriever",
+    "CapabilityRoutingMiddleware",
+    "CapabilityType",
+    "CapabilityTypeError",
+    "CircuitOpenError",
+    "ConfigurationError",
+    "DiscoveryError",
+    "EmbeddingRetriever",
+    "FailureCategory",
+    "FastMCPAdapter",
+    "FastMCPTarget",
+    "HealthState",
     "InMemoryRegistry",
-    "LangChainMCPAdapter",
+    "Interceptor",
+    "InvalidRequestError",
+    "KeywordRetriever",
     "MCPAdapter",
-    "MCPAdapterBase",
+    "MCPCapabilityRouterError",
     "MCPRuntime",
-    "MetricsHook",
-    "MetricsHookBase",
+    "Operation",
+    "OperationContext",
     "Prompt",
+    "PromptArgument",
+    "PromptRetrievalError",
+    "ProtocolError",
+    "RateLimitError",
+    "RefreshError",
+    "RefreshEventSource",
     "RefreshPolicy",
-    "RerankingRetriever",
     "Resource",
+    "ResourceReadError",
+    "RuntimeClosedError",
+    "ServerConnectionError",
+    "ServerError",
+    "ServerNotFoundError",
+    "ServerUnavailableError",
     "Tool",
-    "with_timeout",
+    "ToolExecutionError",
+    "__version__",
+    "categorize_failure",
+    "is_retryable",
+    "make_capability_id",
 ]
