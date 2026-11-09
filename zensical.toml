@@ -61,6 +61,8 @@ unresolved_footnotes = true
 
 [project.theme]
 font = false
+logo = "assets/logo.svg"
+favicon = "assets/logo.svg"
 icon.repo = "fontawesome/brands/github"
 features = [
   "content.action.edit", "content.code.copy", "content.tabs.link",

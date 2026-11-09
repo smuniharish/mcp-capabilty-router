@@ -1,6 +1,10 @@
 # mcp-capability-router
 
 <p align="center">
+  <img src="https://raw.githubusercontent.com/smuniharish/mcp-capabilty-router/master/docs/assets/logo.svg" alt="mcp-capability-router logo" width="96">
+</p>
+
+<p align="center">
   <a href="https://pypi.org/project/mcp-capability-router/"><img src="https://img.shields.io/pypi/v/mcp-capability-router" alt="PyPI"></a>
   <a href="https://pypi.org/project/mcp-capability-router/"><img src="https://img.shields.io/pypi/pyversions/mcp-capability-router" alt="Python"></a>
   <a href="https://github.com/smuniharish/mcp-capabilty-router/actions/workflows/ci.yml"><img src="https://github.com/smuniharish/mcp-capabilty-router/actions/workflows/ci.yml/badge.svg?branch=master" alt="CI"></a>
