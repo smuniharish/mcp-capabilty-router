@@ -36,8 +36,8 @@ jobs:
       - name: Audit runtime dependencies
         run: |
           uv export --no-default-groups --all-extras --no-emit-project --output-file "${RUNNER_TEMP}/runtime.txt"
-          uv run pip-audit --strict --requirement "${RUNNER_TEMP}/runtime.txt"
+          uv run pip-audit --strict --disable-pip --no-deps --requirement "${RUNNER_TEMP}/runtime.txt"
       - name: Audit development dependencies
         run: |
           uv export --all-groups --all-extras --no-emit-project --output-file "${RUNNER_TEMP}/all.txt"
-          uv run pip-audit --strict --requirement "${RUNNER_TEMP}/all.txt"
+          uv run pip-audit --strict --disable-pip --no-deps --requirement "${RUNNER_TEMP}/all.txt"
