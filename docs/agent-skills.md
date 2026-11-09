@@ -1,10 +1,15 @@
 # Agent Skills
 
-mcp-capability-router ships an [Agent Skill](https://agentskills.io) that teaches AI
+mcp-capability-router ships two [Agent Skills](https://agentskills.io) that teach AI
 coding agents to integrate and operate the package correctly. It covers registering
 servers, choosing refresh policies and retrievers, configuring resilience, routing
 tools into LangChain and LangGraph agents, securing tools, observability, testing, and
 troubleshooting. Agents load the skill only when a task calls for it.
+
+Use `mcp-capability-router` for integration and operation, and
+`mcp-capability-router-extend` for custom registries, retrievers, adapters,
+interceptors, and downstream storage. Each includes versioned instructions,
+executable assets, task evaluations, and balanced training/validation trigger queries.
 
 The skill follows the [Agent Skills specification](https://agentskills.io/specification)
 and is published in the repository at
@@ -24,7 +29,7 @@ The [skills CLI](https://www.skills.sh/docs/cli) installs the skill for the agen
 detects in your project:
 
 ```bash
-npx skills add https://github.com/smuniharish/mcp-capabilty-router/tree/master/mcp-capability-router-skills/skills/mcp-capability-router
+npx skills add smuniharish/mcp-capabilty-router --skill mcp-capability-router --skill mcp-capability-router-extend
 ```
 
 Add `-g` to install it for your user instead of the current project, and `-a <agent>`
@@ -62,3 +67,6 @@ mcp-capability-router"*. You can also invoke it explicitly:
 The skill is versioned with the package, and its `metadata.version` matches the
 release it describes. After upgrading mcp-capability-router, reinstall the skill with
 the same command, or replace the copied directory.
+
+Run `uv run pytest tests/skill` to validate both skills, their linked assets and
+evaluation fixtures, setup checks, and executable registry contract template.

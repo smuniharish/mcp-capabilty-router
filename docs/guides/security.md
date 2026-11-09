@@ -39,9 +39,7 @@ from mcp_capability_router import FastMCPAdapter
 
 
 def crm_adapter() -> FastMCPAdapter:
-    return FastMCPAdapter(
-        Client("https://crm.example.com/mcp", auth=vault.token("crm"))
-    )
+    return FastMCPAdapter(Client("https://crm.example.com/mcp", auth=vault.token("crm")))
 
 
 await runtime.register_server("crm", crm_adapter)
@@ -88,9 +86,7 @@ def delete_customer(name: str) -> str:
     return f"deleted {name}"
 
 
-async def read_only(
-    context: OperationContext, call_next: Callable[[], Awaitable[Any]]
-) -> Any:
+async def read_only(context: OperationContext, call_next: Callable[[], Awaitable[Any]]) -> Any:
     capability = context.capability
     if context.operation is Operation.CALL_TOOL and capability is not None:
         if not capability.metadata.get("annotations", {}).get("read_only_hint"):

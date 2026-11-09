@@ -16,12 +16,12 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from mcp_capability_router import MCPRuntime, RefreshPolicy
+from mcp_capability_router import MCPRuntime, RefreshPolicy, ResiliencePolicy
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with MCPRuntime(operation_timeout=30) as runtime:
+    async with MCPRuntime(resilience=ResiliencePolicy(operation_timeout=30)) as runtime:
         await runtime.register_mcp(
             "docs",
             "https://docs.example.com/mcp",

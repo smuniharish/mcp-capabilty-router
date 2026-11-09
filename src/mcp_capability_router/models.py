@@ -92,6 +92,11 @@ class Capability:
 class Tool(Capability):
     """A tool that the model can call.
 
+    The hint properties read the MCP tool annotations in `metadata["annotations"]`
+    and apply the defaults of the MCP specification when a hint is absent. Hints
+    come from the server and are not guarantees; trust them only for servers you
+    trust.
+
     Attributes:
         input_schema: JSON Schema of the tool arguments.
         output_schema: JSON Schema of the structured result, if declared.
@@ -102,6 +107,38 @@ class Tool(Capability):
         default_factory=lambda: {"type": "object", "properties": {}}, hash=False
     )
     output_schema: Mapping[str, Any] | None = field(default=None, hash=False)
+
+    @property
+    def read_only(self) -> bool:
+        """Whether the tool declares that it does not modify its environment."""
+        return self._hint("read_only_hint", default=False)
+
+    @property
+    def destructive(self) -> bool:
+        """Whether the tool may perform destructive updates.
+
+        Only meaningful for tools that are not read-only, which MCP treats as
+        destructive unless they declare otherwise.
+        """
+        return not self.read_only and self._hint("destructive_hint", default=True)
+
+    @property
+    def idempotent(self) -> bool:
+        """Whether calling the tool again with the same arguments has no further effect.
+
+        Read-only tools are idempotent.
+        """
+        return self.read_only or self._hint("idempotent_hint", default=False)
+
+    @property
+    def open_world(self) -> bool:
+        """Whether the tool interacts with an open world of external entities."""
+        return self._hint("open_world_hint", default=True)
+
+    def _hint(self, name: str, *, default: bool) -> bool:
+        annotations = self.metadata.get("annotations")
+        value = annotations.get(name) if isinstance(annotations, Mapping) else None
+        return value if isinstance(value, bool) else default
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

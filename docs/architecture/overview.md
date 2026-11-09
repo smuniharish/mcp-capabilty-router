@@ -51,7 +51,7 @@ rejected tool call is never repeated and never takes a healthy server out of
 service.
 
 **Explicit contracts.** Registries, retrievers, adapters, and interceptors are
-structural protocols, checked when they are supplied. Every public name is exported
+abstract base classes, checked when they are supplied. Public names are exported
 from the package root.
 
 **Deterministic by default.** The default retriever, registry, and pipeline involve no

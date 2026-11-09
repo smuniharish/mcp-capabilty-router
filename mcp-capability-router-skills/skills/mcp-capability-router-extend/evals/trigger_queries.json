@@ -1,0 +1,21 @@
+{
+  "skill_name": "mcp-capability-router-extend",
+  "queries": [
+    {"query": "Implement a custom CapabilityRegistry backed by PostgreSQL.", "should_trigger": true, "split": "train"},
+    {"query": "Write a ResultCacheStore implementation using Redis.", "should_trigger": true, "split": "train"},
+    {"query": "Implement a new MCPAdapter for an internal service.", "should_trigger": true, "split": "train"},
+    {"query": "Implement a custom async fingerprint strategy for router refresh.", "should_trigger": true, "split": "train"},
+    {"query": "Write conformance tests for my custom CapabilityRetriever.", "should_trigger": true, "split": "train"},
+    {"query": "Route only relevant MCP tools into my LangChain agent.", "should_trigger": false, "split": "train"},
+    {"query": "Set per-server resilience policies in MCPRuntime.", "should_trigger": false, "split": "train"},
+    {"query": "Build an MCP server with FastMCP.", "should_trigger": false, "split": "train"},
+    {"query": "Configure mcp-capability-router refresh on query misses.", "should_trigger": false, "split": "train"},
+    {"query": "Create a PostgreSQL table unrelated to MCP.", "should_trigger": false, "split": "train"},
+    {"query": "Implement a partitioned StateStore for MCPRuntime replicas.", "should_trigger": true, "split": "validation"},
+    {"query": "Build a custom ranking backend subclassing CapabilityRetriever.", "should_trigger": true, "split": "validation"},
+    {"query": "Implement an async audit Interceptor subclass for the router.", "should_trigger": true, "split": "validation"},
+    {"query": "Configure HybridRetriever for my router application.", "should_trigger": false, "split": "validation"},
+    {"query": "Trace routed MCP operations with OpenTelemetry.", "should_trigger": false, "split": "validation"},
+    {"query": "Call one fixed MCP tool using a plain client.", "should_trigger": false, "split": "validation"}
+  ]
+}

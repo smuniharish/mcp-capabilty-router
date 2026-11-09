@@ -15,7 +15,6 @@ htmlcov/
 .pytest_cache/
 .ruff_cache/
 .hypothesis/
-.mypy_cache/
 .pyrefly/
 
 # Builds and documentation

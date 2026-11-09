@@ -42,16 +42,12 @@ class CatalogChanges(MessageHandler):
         super().__init__()
         self._queue = queue
 
-    async def on_tool_list_changed(
-        self, message: types.ToolListChangedNotification
-    ) -> None:
+    async def on_tool_list_changed(self, message: types.ToolListChangedNotification) -> None:
         self._queue.put_nowait(message)
 
 
 changes: asyncio.Queue[object] = asyncio.Queue()
-client = Client(
-    "https://plugins.example.com/mcp", message_handler=CatalogChanges(changes)
-)
+client = Client("https://plugins.example.com/mcp", message_handler=CatalogChanges(changes))
 await runtime.register_mcp(
     "plugins", client, refresh=RefreshPolicy(on_register=True, change_events=changes)
 )

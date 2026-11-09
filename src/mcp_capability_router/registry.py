@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from typing import TYPE_CHECKING
 
-from .models import Capability, CapabilityType
+from .contracts import CapabilityRegistry
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Sequence
+
+    from .models import Capability, CapabilityType
 
 
-class InMemoryRegistry:
+class InMemoryRegistry(CapabilityRegistry):
     """Keeps capability metadata in process memory.
 
     Lookups by ID take constant time, and listing the capabilities of one server
@@ -28,9 +33,9 @@ class InMemoryRegistry:
         for capability in capabilities:
             self._discard(capability.capability_id)
             self._items[capability.capability_id] = capability
-            self._by_server.setdefault(capability.server_id, {})[
-                capability.capability_id
-            ] = capability
+            self._by_server.setdefault(capability.server_id, {})[capability.capability_id] = (
+                capability
+            )
 
     async def remove(self, capability_id: str) -> None:
         """Remove one capability; do nothing if it is not stored."""
@@ -44,6 +49,15 @@ class InMemoryRegistry:
     async def get(self, capability_id: str) -> Capability | None:
         """Return the capability `capability_id`, or `None` if it is not stored."""
         return self._items.get(capability_id)
+
+    async def get_many(self, capability_ids: Iterable[str]) -> dict[str, Capability]:
+        """Return the stored capabilities among `capability_ids`, by ID."""
+        items = self._items
+        return {
+            capability_id: items[capability_id]
+            for capability_id in capability_ids
+            if capability_id in items
+        }
 
     async def list(
         self,

@@ -9,14 +9,17 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
-from types import ModuleType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import pytest
 from langchain_core.embeddings import DeterministicFakeEmbedding
 from langchain_core.messages import AIMessage
 
 from tests.support import ScriptedChatModel
+
+if TYPE_CHECKING:
+    from types import ModuleType
+
+    import pytest
 
 EXAMPLES = Path(__file__).resolve().parents[2] / "examples"
 
@@ -24,9 +27,7 @@ EXAMPLES = Path(__file__).resolve().parents[2] / "examples"
 def load(name: str) -> ModuleType:
     if str(EXAMPLES) not in sys.path:
         sys.path.insert(0, str(EXAMPLES))
-    spec = importlib.util.spec_from_file_location(
-        name.removesuffix(".py"), EXAMPLES / name
-    )
+    spec = importlib.util.spec_from_file_location(name.removesuffix(".py"), EXAMPLES / name)
     assert spec is not None
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -53,9 +54,7 @@ async def test_agent_middleware(capsys: pytest.CaptureFixture[str]) -> None:
         responses=[
             AIMessage(
                 content="",
-                tool_calls=[
-                    call("billing_list_invoices", {"customer_id": "c-100"}, "1")
-                ],
+                tool_calls=[call("billing_list_invoices", {"customer_id": "c-100"}, "1")],
             ),
             AIMessage(content="Customer c-100 has one paid invoice, inv-1."),
         ]
@@ -77,9 +76,7 @@ async def test_deep_agent(capsys: pytest.CaptureFixture[str]) -> None:
             ),
             AIMessage(
                 content="",
-                tool_calls=[
-                    call("billing_list_invoices", {"customer_id": "c-200"}, "2")
-                ],
+                tool_calls=[call("billing_list_invoices", {"customer_id": "c-200"}, "2")],
             ),
             AIMessage(content="Globex has one open invoice, inv-2."),
         ]
@@ -101,9 +98,7 @@ async def test_agent_swarm(capsys: pytest.CaptureFixture[str]) -> None:
             AIMessage(content="", tool_calls=[call("transfer_to_billing", {}, "2")]),
             AIMessage(
                 content="",
-                tool_calls=[
-                    call("issue_refund", {"invoice_id": "inv-1", "amount": 100}, "3")
-                ],
+                tool_calls=[call("issue_refund", {"invoice_id": "inv-1", "amount": 100}, "3")],
             ),
             AIMessage(content="Refunded 100 of inv-1 for Acme Corp."),
         ]

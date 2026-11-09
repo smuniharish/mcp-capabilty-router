@@ -34,9 +34,9 @@ async def test_upsert_get_and_list_with_filters() -> None:
         "fs:tool:read",
         "git:tool:status",
     ]
-    assert capability_ids(
-        await registry.list(server_id="fs", type=CapabilityType.RESOURCE)
-    ) == ["fs:resource:file:///a"]
+    assert capability_ids(await registry.list(server_id="fs", type=CapabilityType.RESOURCE)) == [
+        "fs:resource:file:///a"
+    ]
     assert await registry.list(server_id="unknown") == []
 
 

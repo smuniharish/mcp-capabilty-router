@@ -1,0 +1,24 @@
+{
+  "skill_name": "mcp-capability-router-extend",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Implement a CapabilityRegistry using our async database pool. Start from the supplied data model.",
+      "files": ["files/backend.py"],
+      "expected_output": "An ABC subclass with complete serialization, batched lookups, and contract tests.",
+      "assertions": ["Subclasses CapabilityRegistry", "Preserves every capability type and field", "Does not close the shared pool or delete durable data on shutdown"]
+    },
+    {
+      "id": 2,
+      "prompt": "Implement a durable refresh StateStore factory shared by several MCP servers and runtime replicas.",
+      "expected_output": "A server-partitioned StateStore with atomic StateTransaction writes.",
+      "assertions": ["Partitions by server ID", "Preserves all ResourceState fields", "Documents single refresher ownership and policy precedence"]
+    },
+    {
+      "id": 3,
+      "prompt": "Implement Redis result caching for ToolResultCache with application-owned connections.",
+      "expected_output": "A ResultCacheStore subclass using safe serialization and TTL.",
+      "assertions": ["Subclasses ResultCacheStore", "Supports prefix invalidation and expiry", "Does not reimplement single-flight or share across trust boundaries"]
+    }
+  ]
+}

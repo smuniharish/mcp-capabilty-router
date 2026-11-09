@@ -24,3 +24,6 @@ tool errors reach the caller but leave the server healthy:
 health of flaky: healthy
 health of down: unhealthy
 health of reports: degraded
+
+servers with an open circuit drop out of retrieval:
+  ['flaky']

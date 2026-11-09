@@ -72,9 +72,7 @@ def test_http_failures_always_translate(status: int) -> None:
 
 @given(st.integers(min_value=-33000, max_value=-32000))
 def test_mcp_errors_always_translate(code: int) -> None:
-    assert isinstance(
-        translate_error(MCPError(code, "failed")), ServerError | TimeoutError
-    )
+    assert isinstance(translate_error(MCPError(code, "failed")), ServerError | TimeoutError)
 
 
 @given(SERVER_IDS, st.text(min_size=1, max_size=40))

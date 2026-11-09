@@ -91,9 +91,7 @@ class CatalogChanges(MessageHandler):
         super().__init__()
         self._queue = queue
 
-    async def on_tool_list_changed(
-        self, message: types.ToolListChangedNotification
-    ) -> None:
+    async def on_tool_list_changed(self, message: types.ToolListChangedNotification) -> None:
         self._queue.put_nowait(message)
 
     async def on_resource_list_changed(
@@ -101,16 +99,12 @@ class CatalogChanges(MessageHandler):
     ) -> None:
         self._queue.put_nowait(message)
 
-    async def on_prompt_list_changed(
-        self, message: types.PromptListChangedNotification
-    ) -> None:
+    async def on_prompt_list_changed(self, message: types.PromptListChangedNotification) -> None:
         self._queue.put_nowait(message)
 
 
 changes: asyncio.Queue[object] = asyncio.Queue()
-client = Client(
-    "https://plugins.example.com/mcp", message_handler=CatalogChanges(changes)
-)
+client = Client("https://plugins.example.com/mcp", message_handler=CatalogChanges(changes))
 await runtime.register_mcp(
     "plugins", client, refresh=RefreshPolicy(on_register=True, change_events=changes)
 )
@@ -149,13 +143,15 @@ automatic refreshes, which cannot be targeted.
 `RefreshPolicy.config` takes a refresh-engine `RefreshConfig` with the concurrency,
 overlap, failure, retry, and timeout settings of the server's engine.
 `RefreshPolicy.event_handlers` receive the refresh lifecycle events, such as
-refresh-engine's `StructlogEventHandler`. A policy can be shared by any number of
-servers.
+refresh-engine's `StructlogEventHandler`. Handlers must be async functions or
+`EventHandler` subclasses. `events` accepts an application-owned `EventPublisher`;
+the runtime unsubscribes its handlers on close without shutting down the publisher.
+`fingerprint` accepts an async `FingerprintStrategy`.
 
 ## Restarts and shared registries
 
-Each registration keeps the fingerprints of its last refresh in memory. Its first
-refresh therefore stores every capability that the server offers, and removes the
+By default, each registration keeps fingerprints in memory. Its first refresh
+stores every capability that the server offers, and removes the
 capabilities of that server that an earlier registration stored and the server no
 longer offers. Later refreshes write only what changed.
 
@@ -165,6 +161,15 @@ across restarts, or to share them between processes, use a durable registry; see
 of a shared registry, and keep in mind that `unregister_server` removes the server's
 capabilities for every process that shares the registry. When other processes may
 change a server's capabilities, schedule `RefreshMode.FULL` refreshes to restore them.
+
+Supply `RefreshPolicy(state_store=store)` to keep fingerprints across restarts, or
+`MCPRuntime(state_store_factory=factory)` to create a store per server. The factory
+takes the server ID and returns a refresh-engine `StateStore`, directly or
+awaitably. A policy's explicit store takes precedence over the factory.
+Partition state by server; do not share an unpartitioned store across unrelated
+registrations. Use a durable registry alongside durable state so unchanged
+capabilities remain available after restart. See the SQLite and PostgreSQL
+[examples](../examples.md).
 
 ## Dependencies between capabilities
 

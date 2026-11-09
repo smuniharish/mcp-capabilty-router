@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from collections.abc import AsyncIterator
 from types import SimpleNamespace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from fastmcp import Client
@@ -27,11 +26,15 @@ from mcp_capability_router import (
     ProtocolError,
     RefreshError,
     RefreshPolicy,
+    ResiliencePolicy,
     Resource,
     ServerConnectionError,
     ToolExecutionError,
 )
 from tests.support import ScriptedChatModel, capability_ids, demo_server, tool_messages
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 
 @pytest.fixture
@@ -43,9 +46,7 @@ async def adapter() -> AsyncIterator[FastMCPAdapter]:
 
 
 class TestFastMCPAdapter:
-    async def test_implements_the_adapter_contract(
-        self, adapter: FastMCPAdapter
-    ) -> None:
+    async def test_implements_the_adapter_contract(self, adapter: FastMCPAdapter) -> None:
         assert isinstance(adapter, MCPAdapter)
         assert isinstance(adapter.client, Client)
         await adapter.connect()
@@ -74,9 +75,7 @@ class TestFastMCPAdapter:
         with pytest.raises(InvalidRequestError, match="no tool named 'missing'"):
             await adapter.call_tool("missing", {})
 
-    async def test_reads_resources_and_renders_prompts(
-        self, adapter: FastMCPAdapter
-    ) -> None:
+    async def test_reads_resources_and_renders_prompts(self, adapter: FastMCPAdapter) -> None:
         [text] = await adapter.read_resource("resource://notes/readme")
         assert isinstance(text, types.TextResourceContents)
         assert (text.text, text.mime_type) == ("# Hello", "text/markdown")
@@ -227,17 +226,13 @@ class TestRuntimeWithFastMCP:
             assert readme.mime_type == "text/markdown"
             [contents] = await runtime.read_resource(readme.capability_id)
             assert contents.text == "# Hello"
-            rendered = await runtime.get_prompt(
-                "demo:prompt:summarize", {"topic": "MCP"}
-            )
+            rendered = await runtime.get_prompt("demo:prompt:summarize", {"topic": "MCP"})
             assert rendered.messages[0].content.text.startswith("Summarize MCP")
 
     async def test_refresh_follows_server_changes(self) -> None:
         server = demo_server()
         async with MCPRuntime() as runtime:
-            await runtime.register_mcp(
-                "demo", server, refresh=RefreshPolicy(on_register=True)
-            )
+            await runtime.register_mcp("demo", server, refresh=RefreshPolicy(on_register=True))
 
             def subtract(a: int, b: int) -> int:
                 """Subtract two integers."""
@@ -252,7 +247,7 @@ class TestRuntimeWithFastMCP:
             assert result.refreshed_count == 6
 
     async def test_unreachable_servers_fail_with_connection_errors(self) -> None:
-        async with MCPRuntime(operation_timeout=30) as runtime:
+        async with MCPRuntime(resilience=ResiliencePolicy(operation_timeout=30)) as runtime:
             await runtime.register_mcp("offline", "http://127.0.0.1:9/mcp")
             with pytest.raises(RefreshError) as raised:
                 await runtime.refresh_server("offline")
@@ -291,9 +286,7 @@ class TestRuntimeWithFastMCP:
                 tools=[],
                 middleware=[CapabilityRoutingMiddleware(runtime, server_id="demo")],
             )
-            result = await agent.ainvoke(
-                {"messages": [HumanMessage("add two numbers, or fail")]}
-            )
+            result = await agent.ainvoke({"messages": [HumanMessage("add two numbers, or fail")]})
             assert model.calls[0] == ["add", "fail"]
             added, failed = tool_messages(result)
             assert added.artifact == {"structured_content": {"result": 5}}

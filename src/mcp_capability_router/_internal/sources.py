@@ -2,53 +2,58 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Sequence
+from typing import TYPE_CHECKING
 
 from refresh_engine import (
     DiscoveryResult,
     PlanAction,
+    RefreshOperation,
     RefreshRequest,
     Resource,
     ResourceSnapshot,
+    ResourceSource,
 )
 
-from ..contracts import CapabilityRegistry
-from ..models import Capability
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable, Sequence
+
+    from ..contracts import CapabilityRegistry
+    from ..models import Capability
 
 CAPABILITY_KEY = "capability"
 """Key of the discovered `Capability` in the metadata of a refresh-engine resource."""
 
 
-class CapabilitySource:
+class CapabilitySource(ResourceSource):
     """Exposes the capabilities of one server as refresh-engine resources.
 
     Each resource carries its capability in its metadata, along with the `type`
     and `tags` that selectors such as `refresh_engine.TagSelector` read.
 
-    The first successful discovery also prunes the registry of capabilities that
-    the server no longer offers, which an earlier registration may have stored.
+    The first successful discovery also reconciles the registry with the server:
+    it removes capabilities that the server no longer offers, which an earlier
+    registration may have stored, and, with a durable state store, it stores the
+    capabilities that the state store records but the registry lacks.
     """
 
     def __init__(
         self,
         discover: Callable[[], Awaitable[Sequence[Capability]]],
-        prune: Callable[[frozenset[str]], Awaitable[None]],
+        reconcile: Callable[[Sequence[Capability]], Awaitable[None]],
     ) -> None:
         """Create a source that lists capabilities with `discover`."""
         self._discover = discover
-        self._prune = prune
-        self._pruned = False
+        self._reconcile = reconcile
+        self._reconciled = False
         self._error: Exception | None = None
 
     async def discover(self) -> DiscoveryResult:
         """List the capabilities of the server."""
         try:
             capabilities = await self._discover()
-            if not self._pruned:
-                await self._prune(
-                    frozenset(capability.capability_id for capability in capabilities)
-                )
-                self._pruned = True
+            if not self._reconciled:
+                await self._reconcile(capabilities)
+                self._reconciled = True
         except Exception as error:
             self._error = error
             raise
@@ -70,9 +75,7 @@ class CapabilitySource:
 
     async def snapshot(self, resource: Resource, /) -> ResourceSnapshot:
         """Return the capability that discovery attached to `resource`."""
-        return ResourceSnapshot(
-            resource.resource_id, content=resource.metadata[CAPABILITY_KEY]
-        )
+        return ResourceSnapshot(resource.resource_id, content=resource.metadata[CAPABILITY_KEY])
 
     def take_error(self) -> Exception | None:
         """Return and clear the error of the last failed discovery."""
@@ -80,7 +83,7 @@ class CapabilitySource:
         return error
 
 
-class RegistryOperation:
+class RegistryOperation(RefreshOperation):
     """Applies refresh-engine plans to a capability registry."""
 
     def __init__(self, registry: CapabilityRegistry) -> None:
@@ -92,7 +95,7 @@ class RegistryOperation:
         resource: Resource,
         snapshot: ResourceSnapshot | None,
         action: PlanAction,
-        request: RefreshRequest,
+        _request: RefreshRequest,
         /,
     ) -> None:
         """Store or remove the capability of `resource`."""

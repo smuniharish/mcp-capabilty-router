@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from typing import TYPE_CHECKING
 
 from ..errors import ConfigurationError
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 _SERVER_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
 
@@ -46,9 +49,7 @@ def qualified_tool_name(server_id: str, name: str) -> str:
     return f"{server_id}_{name}"
 
 
-def split_qualified_tool_name(
-    qualified: str, server_ids: Iterable[str]
-) -> list[tuple[str, str]]:
+def split_qualified_tool_name(qualified: str, server_ids: Iterable[str]) -> list[tuple[str, str]]:
     """Return every `(server_id, name)` pair that `qualified` can stand for."""
     return [
         (server_id, qualified[len(server_id) + 1 :])

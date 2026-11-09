@@ -158,21 +158,24 @@ from tenacity import (
     wait_exponential_jitter,
 )
 
-from mcp_capability_router import MCPRuntime, is_retryable
+from mcp_capability_router import MCPRuntime, ResiliencePolicy, is_retryable
 
 runtime = MCPRuntime(
-    operation_timeout=30,
-    retry=AsyncRetrying(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential_jitter(initial=0.2, max=5),
-        retry=retry_if_exception(is_retryable),
+    resilience=ResiliencePolicy(
+        operation_timeout=30,
+        retry=AsyncRetrying(
+            stop=stop_after_attempt(3),
+            wait=wait_exponential_jitter(multiplier=0.2, max=5),
+            retry=retry_if_exception(is_retryable),
+        ),
     ),
 )
 ```
 
 `is_retryable` retries only failures that can succeed on another attempt, such as a
 lost connection or an overloaded server, and never repeats a tool call that the tool
-itself rejected. See [Resilience](guides/resilience.md).
+itself rejected. Tool retries also require `readOnlyHint` or `idempotentHint` unless
+the application explicitly sets `retry_unsafe_tools=True`. See [Resilience](guides/resilience.md).
 
 ## Give an agent routed tools
 

@@ -17,9 +17,7 @@
 
 ```python
 def crm_adapter() -> FastMCPAdapter:
-    return FastMCPAdapter(
-        Client("https://crm.example.com/mcp", auth=vault.token("crm"))
-    )
+    return FastMCPAdapter(Client("https://crm.example.com/mcp", auth=vault.token("crm")))
 
 
 await runtime.register_server("crm", crm_adapter)
@@ -36,9 +34,7 @@ Annotations are in `capability.metadata["annotations"]` with snake_case keys, su
 applies to every caller:
 
 ```python
-async def read_only(
-    context: OperationContext, call_next: Callable[[], Awaitable[Any]]
-) -> Any:
+async def read_only(context: OperationContext, call_next: Callable[[], Awaitable[Any]]) -> Any:
     capability = context.capability
     if context.operation is Operation.CALL_TOOL and capability is not None:
         if not capability.metadata.get("annotations", {}).get("read_only_hint"):

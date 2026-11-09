@@ -48,9 +48,9 @@ async def test_matches_whole_words_and_prefixes_but_not_substrings() -> None:
     assert capability_ids(await retriever.retrieve("files", candidates, limit=5)) == [
         "s:tool:read_text_file"
     ]
-    assert capability_ids(
-        await retriever.retrieve("navigation", candidates, limit=5)
-    ) == ["s:tool:navigate"]
+    assert capability_ids(await retriever.retrieve("navigation", candidates, limit=5)) == [
+        "s:tool:navigate"
+    ]
     assert await retriever.retrieve("re", candidates, limit=5) == []
 
 
@@ -69,9 +69,7 @@ async def test_whole_words_outrank_prefixes_and_shared_stems() -> None:
         "s:tool:close_ticket",
         "s:tool:search_tickets",
     ]
-    assert capability_ids(
-        await retriever.retrieve("read file", candidates, limit=2)
-    ) == [
+    assert capability_ids(await retriever.retrieve("read file", candidates, limit=2)) == [
         "s:tool:read_file",
         "s:tool:read_multiple_files",
     ]
@@ -108,9 +106,7 @@ async def test_resource_uris_and_titles_are_searchable() -> None:
     assert capability_ids(await retriever.retrieve("notes", candidates, limit=2)) == [
         "s:resource:resource://notes/readme"
     ]
-    assert capability_ids(await retriever.retrieve("weather", candidates, limit=2)) == [
-        "s:tool:x1"
-    ]
+    assert capability_ids(await retriever.retrieve("weather", candidates, limit=2)) == ["s:tool:x1"]
 
 
 async def test_stop_words_and_empty_queries_list_candidates_by_id() -> None:
@@ -147,9 +143,7 @@ async def test_index_cache_is_reused_rebuilt_on_change_and_pruned() -> None:
     await retriever.retrieve("old", [original], limit=1)
     assert retriever._cache["s:tool:x"] is cached
     changed = Tool(capability_id="s:tool:x", server_id="s", name="x", description="new")
-    assert capability_ids(await retriever.retrieve("new", [changed], limit=1)) == [
-        "s:tool:x"
-    ]
+    assert capability_ids(await retriever.retrieve("new", [changed], limit=1)) == ["s:tool:x"]
     assert retriever._cache["s:tool:x"] is not cached
 
     many = [tool("s", f"t{index}", "bulk") for index in range(1100)]

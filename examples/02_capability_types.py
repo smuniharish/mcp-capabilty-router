@@ -19,29 +19,19 @@ async def main() -> None:
         for capability in await runtime.retrieve("", limit=10):
             print(f"{capability.type:<8} {capability.capability_id}")
 
-        [tool] = await runtime.retrieve(
-            "refund an invoice", type=CapabilityType.TOOL, limit=1
-        )
+        [tool] = await runtime.retrieve("refund an invoice", type=CapabilityType.TOOL, limit=1)
         print(f"\ntool {tool.name} is destructive: {tool.metadata['annotations']}")
-        message = await runtime.execute(
-            tool.capability_id, {"invoice_id": "inv-1", "amount": 200}
-        )
+        message = await runtime.execute(tool.capability_id, {"invoice_id": "inv-1", "amount": 200})
         print(f"refund: {message.artifact['structured_content']}")
 
-        [policy] = await runtime.retrieve(
-            "refund policy", type=CapabilityType.RESOURCE, limit=1
-        )
+        [policy] = await runtime.retrieve("refund policy", type=CapabilityType.RESOURCE, limit=1)
         [contents] = await runtime.read_resource(policy.capability_id)
         print(f"\n{policy.name} ({contents.mime_type}):\n{contents.text}")
 
-        [prompt] = await runtime.retrieve(
-            "explain an invoice", type=CapabilityType.PROMPT, limit=1
-        )
+        [prompt] = await runtime.retrieve("explain an invoice", type=CapabilityType.PROMPT, limit=1)
         assert isinstance(prompt, Prompt)
         print(f"\nprompt arguments: {[argument.name for argument in prompt.arguments]}")
-        rendered = await runtime.get_prompt(
-            prompt.capability_id, {"invoice_id": "inv-2"}
-        )
+        rendered = await runtime.get_prompt(prompt.capability_id, {"invoice_id": "inv-2"})
         for message in rendered.messages:
             print(f"{message.role}: {message.content.text}")
 

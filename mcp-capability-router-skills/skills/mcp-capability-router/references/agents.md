@@ -41,9 +41,7 @@ result = await agent.ainvoke({"messages": [{"role": "user", "content": question}
 ```python
 from deepagents import create_deep_agent
 
-agent = create_deep_agent(
-    model=model, middleware=[CapabilityRoutingMiddleware(runtime, limit=5)]
-)
+agent = create_deep_agent(model=model, middleware=[CapabilityRoutingMiddleware(runtime, limit=5)])
 ```
 
 ## Multi-agent systems

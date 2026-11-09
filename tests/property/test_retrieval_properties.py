@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import asyncio
-import random
+from typing import TYPE_CHECKING
 
 from hypothesis import given
 from hypothesis import strategies as st
 
 from mcp_capability_router import KeywordRetriever, Tool
 from mcp_capability_router.retrieval import _words
+
+if TYPE_CHECKING:
+    import random
 
 WORDS = st.sampled_from(
     ["read", "file", "files", "search", "send", "email", "thread", "navigate", "notes"]
@@ -52,9 +55,7 @@ def test_words_are_lowercase_and_separator_free(text: str) -> None:
 
 
 @given(catalogs(), TEXT, st.integers(min_value=1, max_value=30))
-def test_results_are_unique_bounded_subsets(
-    candidates: list[Tool], query: str, limit: int
-) -> None:
+def test_results_are_unique_bounded_subsets(candidates: list[Tool], query: str, limit: int) -> None:
     result = retrieve(query, candidates, limit)
     assert len(result) == len(set(result)) <= limit
     assert set(result) <= {capability.capability_id for capability in candidates}
@@ -70,16 +71,12 @@ def test_ranking_ignores_candidate_order(
 
 
 @given(catalogs(), st.integers(min_value=1, max_value=30))
-def test_queries_without_words_list_candidates_by_id(
-    candidates: list[Tool], limit: int
-) -> None:
+def test_queries_without_words_list_candidates_by_id(candidates: list[Tool], limit: int) -> None:
     expected = sorted(capability.capability_id for capability in candidates)[:limit]
     assert retrieve("the of to", candidates, limit) == expected
 
 
 @given(catalogs(), TEXT, st.integers(min_value=1, max_value=10))
-def test_smaller_limits_return_prefixes(
-    candidates: list[Tool], query: str, limit: int
-) -> None:
+def test_smaller_limits_return_prefixes(candidates: list[Tool], query: str, limit: int) -> None:
     longer = retrieve(query, candidates, limit + 5)
     assert retrieve(query, candidates, limit) == longer[:limit]

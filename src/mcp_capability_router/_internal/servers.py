@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+import inspect
 
-from ..contracts import MCPAdapter
+from ..contracts import AdapterFactory, MCPAdapter
 from ..errors import ConfigurationError, ServerNotFoundError
 
 
@@ -17,7 +17,7 @@ class ServerHandle:
     connects again, so operations that were still queued cannot leak connections.
     """
 
-    def __init__(self, server_id: str, factory: Callable[[], MCPAdapter]) -> None:
+    def __init__(self, server_id: str, factory: AdapterFactory) -> None:
         """Create a handle that connects lazily."""
         self.server_id = server_id
         self._factory = factory
@@ -69,11 +69,12 @@ class ServerHandle:
             raise ServerNotFoundError(msg)
 
     async def _open(self) -> MCPAdapter:
-        adapter = self._factory()
+        created = self._factory()
+        adapter = await created if inspect.isawaitable(created) else created
         if not isinstance(adapter, MCPAdapter):
             msg = (
                 f"the adapter factory of server {self.server_id!r} returned "
-                f"{type(adapter).__name__}, which does not implement MCPAdapter"
+                f"{type(adapter).__name__}, which does not subclass MCPAdapter"
             )
             raise ConfigurationError(msg)
         await adapter.connect()

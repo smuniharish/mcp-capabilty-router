@@ -1,179 +1,108 @@
 # Extending the router
 
-Every extension point is a structural protocol: implement the methods, and the object
-fits, without inheriting from anything. The runtime checks registries, retrievers, and
-interceptors with `isinstance` when it receives them, and adapters when their factory
-creates them, so a missing method raises `ConfigurationError` early instead of failing
-in the middle of an operation.
+Subclass the relevant abstract base class and implement its async methods.
+Registries and retrievers are checked when the runtime is constructed; adapters
+are checked when their factories run. Invalid objects raise `ConfigurationError`.
+Interceptors may be an `Interceptor` subclass or a plain async function.
 
 | Extension | Contract | Supplied with |
 | --- | --- | --- |
-| Where capability metadata lives | `CapabilityRegistry` | `MCPRuntime(registry=...)` |
-| How capabilities are ranked | `CapabilityRetriever` | `MCPRuntime(retriever=...)` |
-| How a server is reached | `MCPAdapter` | `register_server(server_id, factory)` |
-| What happens around every operation | `Interceptor` | `MCPRuntime(interceptors=[...])` |
+| Capability metadata | `CapabilityRegistry` | `MCPRuntime(registry=...)` |
+| Candidate rankings | `CapabilityRetriever` | `MCPRuntime(retriever=...)` |
+| Server transport | `MCPAdapter` | `register_server(server_id, factory)` |
+| Operation middleware | `Interceptor` or async function | `MCPRuntime(interceptors=[...])` |
+| Cached tool results | `ResultCacheStore` | `ToolResultCache(store=...)` |
+| Refresh state | refresh-engine `StateStore` | Policy or runtime store factory |
 
 ## Registries
 
-A registry stores capability records and answers lookups:
+A `CapabilityRegistry` implements `upsert_many`, `remove`, `remove_server`, `get`,
+and `list`. The default `get_many` calls `get` for each ID; override it with a
+batched query for database-backed stores. The default `close` is a no-op.
 
-```python
-from collections.abc import Iterable, Sequence
-
-from mcp_capability_router import Capability, CapabilityRegistry, CapabilityType
-
-
-class DatabaseRegistry:
-    async def upsert_many(self, capabilities: Iterable[Capability]) -> None: ...
-
-    async def remove(self, capability_id: str) -> None: ...
-
-    async def remove_server(self, server_id: str) -> None: ...
-
-    async def get(self, capability_id: str) -> Capability | None: ...
-
-    async def list(
-        self, *, server_id: str | None = None, type: CapabilityType | None = None
-    ) -> Sequence[Capability]: ...
-
-    async def close(self) -> None: ...
-
-
-assert isinstance(DatabaseRegistry(), CapabilityRegistry)
-```
-
-A durable registry lets capabilities survive restarts and lets several processes
-share them: one process refreshes, and every process retrieves. Keep these rules:
-
-- Store every field of a record, including the type-specific fields of `Tool`,
-  `Resource`, and `Prompt`, and return equal records.
-- Make every method safe to call concurrently: refreshes of different servers and
-  retrievals run at the same time.
-- Make `list` fast; it runs before every retrieval. Cache, or filter in the database
-  by server and type.
-- `close` releases the registry's own resources. The runtime calls it when the
-  runtime closes, and leaves stored capabilities in place.
+Store every field of `Tool`, `Resource`, and `Prompt`, including schemas, hints,
+dependencies, and metadata. Support concurrent reads and writes. Make `list`
+fast: it runs before retrieval. Close connections owned by your registry without
+deleting durable records. Shared pools remain application-owned.
 
 The [SQLite](../examples.md#a-durable-registry-on-sqlite) and
-[PostgreSQL](../examples.md#a-registry-shared-through-postgresql) examples show
-complete durable registries.
+[PostgreSQL](../examples.md#a-registry-shared-through-postgresql) examples provide
+complete implementations, including refresh StateStores. Only one process should
+refresh a given server in a shared registry.
 
 ## Retrievers
 
-A retriever ranks the candidates that the runtime passes to it. The candidates are
-already filtered by type and server. This retriever fuses keyword and semantic
-rankings with reciprocal rank fusion:
+Subclass `CapabilityRetriever` and implement
+`async retrieve(query, candidates, *, limit)`. Return no more than `limit` records,
+best first, and only records from the supplied candidates. Candidates are already
+filtered by server, type, predicate, and health.
+
+For weighted fusion, use the built-in implementation:
 
 ```python
-import asyncio
-from collections.abc import Sequence
-
 from mcp_capability_router import (
-    Capability,
-    CapabilityRetriever,
     EmbeddingRetriever,
+    HybridRetriever,
     KeywordRetriever,
     MCPRuntime,
 )
 
-
-class HybridRetriever:
-    """Fuses keyword and semantic rankings with reciprocal rank fusion."""
-
-    def __init__(self, semantic: CapabilityRetriever, *, depth: int = 20) -> None:
-        self._retrievers = (KeywordRetriever(), semantic)
-        self._depth = depth
-
-    async def retrieve(
-        self, query: str, candidates: Sequence[Capability], *, limit: int
-    ) -> list[Capability]:
-        depth = max(limit, self._depth)
-        rankings = await asyncio.gather(
-            *(
-                retriever.retrieve(query, candidates, limit=depth)
-                for retriever in self._retrievers
-            )
-        )
-        scores: dict[str, float] = {}
-        found: dict[str, Capability] = {}
-        for ranking in rankings:
-            for rank, capability in enumerate(ranking):
-                key = capability.capability_id
-                scores[key] = scores.get(key, 0.0) + 1 / (60 + rank)
-                found[key] = capability
-        best = sorted(scores, key=lambda key: (-scores[key], key))[:limit]
-        return [found[key] for key in best]
-
-
-runtime = MCPRuntime(retriever=HybridRetriever(EmbeddingRetriever(embeddings)))
+retriever = HybridRetriever(
+    [KeywordRetriever(), EmbeddingRetriever(embeddings)],
+    weights=[1, 2],
+    fetch_k=50,
+)
+runtime = MCPRuntime(retriever=retriever)
 ```
 
-Return at most `limit` capabilities, best first, and only capabilities from
-`candidates`.
+See [Retrieval](retrieval.md) for vector-store and reranker customization.
 
 ## Adapters
 
-An adapter connects the runtime to one server. See
-[Write a custom adapter](servers.md#write-a-custom-adapter).
+Subclass `MCPAdapter`; see [Write a custom adapter](servers.md#write-a-custom-adapter).
+Factories take no arguments and may return an adapter directly or awaitably.
+`FastMCPAdapter` can be subclassed when only one transport behavior needs changing.
+Raise the router's classified exceptions so retry and circuit policies work.
 
 ## Interceptors
 
-An interceptor is an async callable that receives the operation context and a
-`call_next` function. It must return the result of `await call_next()` or raise:
+An interceptor receives an `OperationContext` and `call_next`, returning the result
+or raising an exception. It runs once around the whole operation, outside retries
+and circuit breaking but inside concurrency limits.
 
 ```python
 import logging
 import time
-from collections.abc import Awaitable, Callable
 from typing import Any
 
-from mcp_capability_router import MCPRuntime, OperationContext
+from mcp_capability_router import CallNext, Interceptor, MCPRuntime, OperationContext
 
 audit_log = logging.getLogger("audit")
 
 
-async def audit(
-    context: OperationContext, call_next: Callable[[], Awaitable[Any]]
-) -> Any:
-    started = time.perf_counter()
-    try:
-        return await call_next()
-    finally:
-        target = context.capability.capability_id if context.capability else "-"
-        audit_log.info(
-            "%s on %s (%s) took %.3fs",
-            context.operation,
-            context.server_id,
-            target,
-            time.perf_counter() - started,
-        )
+class Audit(Interceptor):
+    async def __call__(self, context: OperationContext, call_next: CallNext, /) -> Any:
+        started = time.perf_counter()
+        try:
+            return await call_next()
+        finally:
+            audit_log.info(
+                "%s on %s took %.3fs",
+                context.operation,
+                context.server_id,
+                time.perf_counter() - started,
+            )
 
 
-runtime = MCPRuntime(interceptors=[audit])
+runtime = MCPRuntime(interceptors=[Audit()])
 ```
 
-The context carries the server ID, the operation, and, for tool calls, resource reads,
-and prompt renders, the capability and its arguments. Interceptors run in order, inside
-the concurrency limit and outside the circuit breaker and retries, so each one sees an
-operation once. Typical uses:
+Use `AuthorizationError` to reject a call. Use the built-in
+`OpenTelemetryInterceptor` for tracing and `ToolResultCache` for read-only caching;
+see [Observability](observability.md) and [Customization](customization.md).
 
-- **Policy**: raise `AuthorizationError` to reject an operation; it is not retried and
-  does not count toward the circuit breaker. See
-  [Isolation and security](security.md#restrict-tools).
-- **Auditing**: record who called which tool with which arguments.
-- **Tracing**: open a span around `call_next()`:
+## Conformance tests
 
-```python
-from opentelemetry import trace
-
-tracer = trace.get_tracer("mcp_capability_router")
-
-
-async def traced(
-    context: OperationContext, call_next: Callable[[], Awaitable[Any]]
-) -> Any:
-    with tracer.start_as_current_span(
-        f"mcp.{context.operation}", attributes={"mcp.server_id": context.server_id}
-    ):
-        return await call_next()
-```
+The async suites in `mcp_capability_router.testing` exercise registries,
+retrievers, adapters, and result-cache stores. Run them on each custom
+implementation before connecting it to a runtime; see [Testing](testing.md).

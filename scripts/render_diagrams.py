@@ -40,9 +40,7 @@ def check() -> int:
     sources = sorted(DIAGRAMS.glob("*.mmd"))
     expected = {image for source in sources for image in images(source)}
     missing = sorted(image.name for image in expected if not image.exists())
-    stray = sorted(
-        image.name for image in DIAGRAMS.glob("*.png") if image not in expected
-    )
+    stray = sorted(image.name for image in DIAGRAMS.glob("*.png") if image not in expected)
     for name in missing:
         print(f"missing image: {name}")
     for name in stray:
@@ -70,9 +68,7 @@ def render() -> int:
         puppeteer_config = Path(directory) / "puppeteer.json"
         puppeteer_config.write_text(json.dumps(puppeteer), encoding="utf-8")
         for source in sorted(DIAGRAMS.glob("*.mmd")):
-            for (variant, theme), image in zip(
-                THEMES.items(), images(source), strict=True
-            ):
+            for (variant, theme), image in zip(THEMES.items(), images(source), strict=True):
                 subprocess.run(
                     [
                         npx,
@@ -103,9 +99,7 @@ def render() -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Render documentation diagrams.")
-    parser.add_argument(
-        "--check", action="store_true", help="only verify that the images exist"
-    )
+    parser.add_argument("--check", action="store_true", help="only verify that the images exist")
     arguments = parser.parse_args()
     return check() if arguments.check else render()
 

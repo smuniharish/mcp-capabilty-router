@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
-from ..contracts import MCPAdapter
 from ..errors import DiscoveryError
 from ..models import (
     Capability,
@@ -21,13 +20,13 @@ from .concurrency import gather_or_cancel
 if TYPE_CHECKING:
     from mcp import types
 
+    from ..contracts import MCPAdapter
+
 DEPENDS_ON_KEY = "depends_on"
 """Key of the `_meta` entry that lists the IDs a capability depends on."""
 
 
-async def discover_capabilities(
-    adapter: MCPAdapter, server_id: str
-) -> list[Capability]:
+async def discover_capabilities(adapter: MCPAdapter, server_id: str) -> list[Capability]:
     """List the tools, resources, and prompts of a server as capabilities.
 
     Raises:
@@ -40,14 +39,8 @@ async def discover_capabilities(
     )
     capabilities: list[Capability] = [
         *(_tool(server_id, item) for item in _items(tools, types.Tool, server_id)),
-        *(
-            _resource(server_id, item)
-            for item in _items(resources, types.Resource, server_id)
-        ),
-        *(
-            _prompt(server_id, item)
-            for item in _items(prompts, types.Prompt, server_id)
-        ),
+        *(_resource(server_id, item) for item in _items(resources, types.Resource, server_id)),
+        *(_prompt(server_id, item) for item in _items(prompts, types.Prompt, server_id)),
     ]
     seen: set[str] = set()
     for capability in capabilities:
@@ -77,9 +70,7 @@ def _items[T](items: Iterable[object], kind: type[T], server_id: str) -> list[T]
 def _tool(server_id: str, tool: types.Tool) -> Tool:
     meta = dict(tool.meta or {})
     annotations = (
-        tool.annotations.model_dump(exclude_none=True, mode="json")
-        if tool.annotations
-        else {}
+        tool.annotations.model_dump(exclude_none=True, mode="json") if tool.annotations else {}
     )
     return Tool(
         capability_id=make_capability_id(server_id, CapabilityType.TOOL, tool.name),
@@ -103,9 +94,7 @@ def _resource(server_id: str, resource: types.Resource) -> Resource:
         else {}
     )
     return Resource(
-        capability_id=make_capability_id(
-            server_id, CapabilityType.RESOURCE, resource.uri
-        ),
+        capability_id=make_capability_id(server_id, CapabilityType.RESOURCE, resource.uri),
         server_id=server_id,
         name=resource.name,
         title=resource.title,
@@ -140,9 +129,7 @@ def _prompt(server_id: str, prompt: types.Prompt) -> Prompt:
     )
 
 
-def _metadata(
-    annotations: Mapping[str, Any], meta: Mapping[str, Any]
-) -> dict[str, Any]:
+def _metadata(annotations: Mapping[str, Any], meta: Mapping[str, Any]) -> dict[str, Any]:
     metadata: dict[str, Any] = {}
     if annotations:
         metadata["annotations"] = dict(annotations)

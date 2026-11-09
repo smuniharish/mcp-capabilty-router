@@ -1,0 +1,21 @@
+{
+  "skill_name": "mcp-capability-router",
+  "queries": [
+    {"query": "Route only relevant MCP tools into my LangChain agent.", "should_trigger": true, "split": "train"},
+    {"query": "Configure mcp-capability-router refresh on query misses.", "should_trigger": true, "split": "train"},
+    {"query": "Set per-server resilience policies in MCPRuntime.", "should_trigger": true, "split": "train"},
+    {"query": "Trace routed MCP operations with OpenTelemetry.", "should_trigger": true, "split": "train"},
+    {"query": "Use ToolResultCache for read-only MCP tools.", "should_trigger": true, "split": "train"},
+    {"query": "Build an MCP server with FastMCP.", "should_trigger": false, "split": "train"},
+    {"query": "Implement a custom CapabilityRegistry backed by PostgreSQL.", "should_trigger": false, "split": "train"},
+    {"query": "Write an unrelated database schema migration.", "should_trigger": false, "split": "train"},
+    {"query": "Call one fixed MCP tool using a plain client.", "should_trigger": false, "split": "train"},
+    {"query": "Optimize an image classifier.", "should_trigger": false, "split": "train"},
+    {"query": "Configure HybridRetriever for my router application.", "should_trigger": true, "split": "validation"},
+    {"query": "Why does mcp-capability-router retrieve no tools?", "should_trigger": true, "split": "validation"},
+    {"query": "Isolate tenants using separate MCPRuntime lifespans.", "should_trigger": true, "split": "validation"},
+    {"query": "Implement a new MCPAdapter for an internal service.", "should_trigger": false, "split": "validation"},
+    {"query": "Deploy an OpenTelemetry collector without a router.", "should_trigger": false, "split": "validation"},
+    {"query": "Create a generic LangGraph chat application with no MCP.", "should_trigger": false, "split": "validation"}
+  ]
+}

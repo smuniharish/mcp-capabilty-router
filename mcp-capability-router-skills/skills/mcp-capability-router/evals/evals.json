@@ -1,0 +1,24 @@
+{
+  "skill_name": "mcp-capability-router",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Connect this application's CRM and billing MCP servers to a LangChain agent, exposing only three relevant tools per turn.",
+      "files": ["files/app.py"],
+      "expected_output": "An async runtime lifespan, refresh policies, and CapabilityRoutingMiddleware.",
+      "assertions": ["Uses on_register or explicit refresh before retrieval", "Invokes the agent asynchronously", "Closes the runtime and scopes credentials"]
+    },
+    {
+      "id": 2,
+      "prompt": "Configure a slow server with its own timeout, safe retries, and independent quota while preserving the runtime policy.",
+      "expected_output": "A per-registration ResiliencePolicy made with dataclasses.replace.",
+      "assertions": ["Puts timeout and retry inside ResiliencePolicy", "Preserves default policy fields", "Does not retry unsafe tool calls implicitly"]
+    },
+    {
+      "id": 3,
+      "prompt": "Add read-only result caching and OpenTelemetry traces to the router without leaking tool arguments.",
+      "expected_output": "Tracing before ToolResultCache, with application-owned telemetry and cache storage.",
+      "assertions": ["Uses the otel extra and OpenTelemetryInterceptor", "Caches safe reads only and documents invalidation", "Closes application-owned providers and stores"]
+    }
+  ]
+}

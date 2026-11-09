@@ -35,12 +35,15 @@ import subprocess
 import sys
 import tempfile
 import unicodedata
-from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 from urllib.parse import unquote, urlsplit
 
 import mcp_capability_router
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
 
 ROOT = Path(__file__).resolve().parent.parent
 DOCS = ROOT / "docs"
@@ -63,6 +66,18 @@ CONTRIBUTOR_DOCUMENTS = frozenset(
     {"CONTRIBUTING.md", "mcp-capability-router-skills/validation/README.md"}
 )
 PUBLIC = frozenset(mcp_capability_router.__all__) | {"__version__"}
+PUBLIC_MODULES = {
+    "mcp_capability_router.otel": frozenset({"OpenTelemetryInterceptor"}),
+    "mcp_capability_router.testing": frozenset(
+        {
+            "CapabilityRegistryContract",
+            "CapabilityRetrieverContract",
+            "MCPAdapterContract",
+            "ResultCacheStoreContract",
+            "sample_capabilities",
+        }
+    ),
+}
 TEMPLATES = "mcp-capability-router-skills/skills/*/assets/*.py"
 SKILL = "mcp-capability-router-skills/skills/mcp-capability-router/SKILL.md"
 SKILL_VERSION = re.compile(r'(?m)^  version: "(?P<version>[^"]+)"$')
@@ -77,13 +92,14 @@ MARKDOWN_LINK = re.compile(
 )
 HTML_LINK = re.compile(r"\b(?:href|src|srcset)=\"(?P<target>[^\"]+)\"")
 INLINE_CODE = re.compile(r"`+[^`]*`+")
-# langsmith, a LangChain dependency, calls asyncio.iscoroutinefunction, which Python
-# 3.14 deprecates; every other warning is an error.
+# Limit warning filters to known third-party import-time checks.
 WARNING_OPTIONS = (
     "-W",
     "error",
     "-W",
-    "ignore:'asyncio.iscoroutinefunction' is deprecated:DeprecationWarning",
+    "ignore:'asyncio.iscoroutinefunction':DeprecationWarning",
+    "-W",
+    "ignore:<class 'key_value.:DeprecationWarning",
 )
 
 
@@ -213,9 +229,7 @@ def heading_text(raw: str) -> str:
     return text.replace("`", "")
 
 
-def anchors(
-    path: Path, *, github: bool, seen: frozenset[Path] = frozenset()
-) -> set[str]:
+def anchors(path: Path, *, github: bool, seen: frozenset[Path] = frozenset()) -> set[str]:
     """Return the heading anchors of a Markdown file, including included files."""
     document = parse(path)
     found: set[str] = set()
@@ -247,9 +261,7 @@ def site_page(path: str) -> Path | None:
     """Map a documentation-site URL path to its Markdown source."""
     stem = path.strip("/")
     candidates = (
-        [DOCS / "index.md"]
-        if not stem
-        else [DOCS / f"{stem}.md", DOCS / stem / "index.md"]
+        [DOCS / "index.md"] if not stem else [DOCS / f"{stem}.md", DOCS / stem / "index.md"]
     )
     return next((candidate for candidate in candidates if candidate.exists()), None)
 
@@ -333,7 +345,11 @@ def imported_names(tree: ast.AST) -> Iterator[tuple[int, str]]:
     """Yield problems with the `mcp_capability_router` names used by a code block."""
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module is not None:
-            if node.module.startswith("mcp_capability_router."):
+            if node.module in PUBLIC_MODULES:
+                for alias in node.names:
+                    if alias.name not in PUBLIC_MODULES[node.module]:
+                        yield node.lineno, f"imports non-public name {alias.name!r}"
+            elif node.module.startswith("mcp_capability_router."):
                 yield (
                     node.lineno,
                     f"imports from {node.module}; import from mcp_capability_router",
@@ -344,7 +360,10 @@ def imported_names(tree: ast.AST) -> Iterator[tuple[int, str]]:
                         yield node.lineno, f"imports non-public name {alias.name!r}"
         elif isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name.startswith("mcp_capability_router."):
+                if (
+                    alias.name.startswith("mcp_capability_router.")
+                    and alias.name not in PUBLIC_MODULES
+                ):
                     yield (
                         node.lineno,
                         f"imports {alias.name}; import from mcp_capability_router",
@@ -353,7 +372,7 @@ def imported_names(tree: ast.AST) -> Iterator[tuple[int, str]]:
             isinstance(node, ast.Attribute)
             and isinstance(node.value, ast.Name)
             and node.value.id == "mcp_capability_router"
-            and node.attr not in PUBLIC
+            and node.attr not in PUBLIC | {"otel", "testing"}
         ):
             yield node.lineno, f"uses non-public name mcp_capability_router.{node.attr}"
 
@@ -421,9 +440,7 @@ def check_fences(document: Document, report: Report) -> None:
             continue
         report.executed += 1
         following = document.fences[position + 1 : position + 2]
-        expected = (
-            following[0].body if following and following[0].info == "text" else ""
-        )
+        expected = following[0].body if following and following[0].info == "text" else ""
         completed = run(fence.body)
         stdout = completed.stdout.replace("\r\n", "\n")
         if completed.returncode != 0 or completed.stderr:
@@ -457,8 +474,7 @@ def check_consistency(report: Report) -> None:
         pages = documented.get(name, [])
         if len(pages) != 1:
             report.problems.append(
-                f"docs/api: mcp_capability_router.{name} is documented "
-                f"{len(pages)} times"
+                f"docs/api: mcp_capability_router.{name} is documented {len(pages)} times"
             )
     for name in sorted(set(documented) - PUBLIC):
         report.problems.append(f"docs/api: mcp_capability_router.{name} is not public")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 from hypothesis import given
 from hypothesis import strategies as st
@@ -14,27 +15,23 @@ from mcp_capability_router import (
     InvalidRequestError,
     Operation,
     OperationContext,
+    ResiliencePolicy,
     ServerUnavailableError,
     is_retryable,
 )
 from mcp_capability_router._internal.pipeline import OperationPipeline
 
-CONTEXT = OperationContext(server_id="s", operation=Operation.CALL_TOOL)
+CONTEXT = OperationContext(server_id="s", operation=Operation.READ_RESOURCE)
 
 
-def pipeline(**options: object) -> OperationPipeline:
-    settings: dict[str, object] = {
-        "max_concurrency": 4,
-        "operation_timeout": None,
-        "retry": None,
-        "rate_limiter": None,
-        "circuit_breaker": None,
-        "interceptors": (),
-        "metrics_sink": None,
-    }
-    settings.update(options)
-    instance = OperationPipeline(**settings)  # type: ignore[arg-type]
-    instance.add_server("s")
+def pipeline(**options: Any) -> OperationPipeline:
+    instance = OperationPipeline(
+        max_concurrency=4,
+        policy=ResiliencePolicy(**options),
+        interceptors=(),
+        metrics_sink=None,
+    )
+    instance.add_server("s", None)
     return instance
 
 
@@ -42,9 +39,7 @@ def pipeline(**options: object) -> OperationPipeline:
     failures=st.integers(min_value=0, max_value=6),
     attempts=st.integers(min_value=1, max_value=6),
 )
-def test_retries_succeed_exactly_when_attempts_suffice(
-    failures: int, attempts: int
-) -> None:
+def test_retries_succeed_exactly_when_attempts_suffice(failures: int, attempts: int) -> None:
     calls = {"count": 0}
 
     async def flaky() -> str:
@@ -53,9 +48,7 @@ def test_retries_succeed_exactly_when_attempts_suffice(
             raise ServerUnavailableError("busy")
         return "ok"
 
-    retry = AsyncRetrying(
-        stop=stop_after_attempt(attempts), retry=retry_if_exception(is_retryable)
-    )
+    retry = AsyncRetrying(stop=stop_after_attempt(attempts), retry=retry_if_exception(is_retryable))
 
     async def scenario() -> bool:
         try:
@@ -76,9 +69,7 @@ def test_circuit_opens_after_consecutive_server_failures(
     outcomes: list[str], threshold: int
 ) -> None:
     async def scenario() -> list[str]:
-        breakers = AsyncCircuitBreakerFactory(
-            default_threshold=threshold, default_ttl=600
-        )
+        breakers = AsyncCircuitBreakerFactory(default_threshold=threshold, default_ttl=600)
         instance = pipeline(circuit_breaker=breakers)
         observed = []
         for outcome in outcomes:

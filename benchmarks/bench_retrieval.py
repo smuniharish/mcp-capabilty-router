@@ -52,9 +52,7 @@ def catalog(size: int) -> list[Tool]:
     return tools
 
 
-async def measure(
-    retriever: CapabilityRetriever, candidates: list[Tool], rounds: int
-) -> float:
+async def measure(retriever: CapabilityRetriever, candidates: list[Tool], rounds: int) -> float:
     await retriever.retrieve(QUERIES[0], candidates, limit=10)
     samples = []
     for round_number in range(rounds):

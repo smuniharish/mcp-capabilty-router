@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastmcp import FastMCP
 from langchain_core.language_models import BaseChatModel
@@ -14,7 +13,10 @@ from langchain_core.tools import BaseTool
 from mcp import types
 from pydantic import Field
 
-from mcp_capability_router import Capability, Prompt, Resource, Tool
+from mcp_capability_router import Capability, MCPAdapter, Prompt, Resource, Tool
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
 
 
 def mcp_tool(name: str, description: str = "", **fields: Any) -> types.Tool:
@@ -23,9 +25,7 @@ def mcp_tool(name: str, description: str = "", **fields: Any) -> types.Tool:
     return types.Tool(name=name, description=description, **fields)
 
 
-def mcp_resource(
-    uri: str, name: str, description: str = "", **fields: Any
-) -> types.Resource:
+def mcp_resource(uri: str, name: str, description: str = "", **fields: Any) -> types.Resource:
     """Build an MCP resource definition."""
     return types.Resource(uri=uri, name=name, description=description, **fields)
 
@@ -67,7 +67,7 @@ def prompt(server_id: str, name: str, **fields: Any) -> Prompt:
     )
 
 
-class FakeAdapter:
+class FakeAdapter(MCPAdapter):
     """An in-memory MCP adapter that records calls and can fail on demand.
 
     Set `failures[method]` to a list of exceptions; each call of `method` raises
@@ -183,9 +183,7 @@ class ScriptedChatModel(BaseChatModel):
         return "scripted"
 
     def bind_tools(self, tools: Sequence[Any], **kwargs: Any) -> ScriptedChatModel:  # type: ignore[override]
-        names = [
-            item.name if isinstance(item, BaseTool) else item["name"] for item in tools
-        ]
+        names = [item.name if isinstance(item, BaseTool) else item["name"] for item in tools]
         return self.model_copy(update={"bound": names})
 
     def _generate(
@@ -212,9 +210,7 @@ class ScriptedChatModel(BaseChatModel):
 
 def tool_messages(result: Mapping[str, Any]) -> list[ToolMessage]:
     """Return the tool messages of an agent result."""
-    return [
-        message for message in result["messages"] if isinstance(message, ToolMessage)
-    ]
+    return [message for message in result["messages"] if isinstance(message, ToolMessage)]
 
 
 def capability_ids(capabilities: Sequence[Capability]) -> list[str]:

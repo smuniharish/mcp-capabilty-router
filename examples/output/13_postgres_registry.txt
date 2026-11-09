@@ -1,3 +1,4 @@
-refreshing process stored 4 capabilities
+refreshing process stored 4 fingerprints
 another process retrieves: billing:tool:issue_refund
+after a restart, a refresh finds 4 unchanged and 0 new or modified capabilities
 cleaned up

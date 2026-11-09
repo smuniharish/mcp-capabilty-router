@@ -124,29 +124,21 @@ async def main() -> None:
             [
                 AIMessage(
                     "",
-                    tool_calls=[
-                        {"name": "search_tickets", "args": {"text": "VPN"}, "id": "1"}
-                    ],
+                    tool_calls=[{"name": "search_tickets", "args": {"text": "VPN"}, "id": "1"}],
                 ),
                 AIMessage("Ticket T-2 mentions the VPN."),
             ]
         )
     )
     async with MCPRuntime() as runtime:
-        await runtime.register_mcp(
-            "support", support, refresh=RefreshPolicy(on_register=True)
-        )
+        await runtime.register_mcp("support", support, refresh=RefreshPolicy(on_register=True))
         agent = create_agent(
             model,
             tools=[],
             middleware=[CapabilityRoutingMiddleware(runtime, server_id="support")],
         )
         result = await agent.ainvoke(
-            {
-                "messages": [
-                    {"role": "user", "content": "Which tickets mention the VPN?"}
-                ]
-            }
+            {"messages": [{"role": "user", "content": "Which tickets mention the VPN?"}]}
         )
         for message in result["messages"]:
             if isinstance(message, ToolMessage):
@@ -177,7 +169,7 @@ from mcp_capability_router import RefreshPolicy
 refreshed = asyncio.Event()
 
 
-def on_event(event: RefreshEvent) -> None:
+async def on_event(event: RefreshEvent) -> None:
     if event.kind is EventKind.REFRESH_COMPLETED:
         refreshed.set()
 

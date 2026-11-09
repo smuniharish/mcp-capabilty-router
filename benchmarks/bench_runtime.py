@@ -7,17 +7,20 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import functools
 import statistics
 import time
-from collections.abc import Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from mcp import types
 
-from mcp_capability_router import MCPRuntime
+from mcp_capability_router import MCPAdapter, MCPRuntime
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 
-class CatalogAdapter:
+class CatalogAdapter(MCPAdapter):
     """An in-memory adapter with a large tool catalog and instant calls."""
 
     def __init__(self, size: int) -> None:
@@ -59,9 +62,7 @@ async def main() -> None:
     print(f"{'measurement':<40} {'value':>10}")
     for size in (1_000, 10_000):
         async with MCPRuntime() as runtime:
-            await runtime.register_server(
-                "catalog", lambda size=size: CatalogAdapter(size)
-            )
+            await runtime.register_server("catalog", functools.partial(CatalogAdapter, size))
             started = time.perf_counter()
             first = await runtime.refresh_server("catalog")
             initial = time.perf_counter() - started

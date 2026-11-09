@@ -16,17 +16,15 @@ from pathlib import Path
 
 from fastmcp.client.transports import NpxStdioTransport
 
-from mcp_capability_router import CapabilityType, MCPRuntime, RefreshPolicy
+from mcp_capability_router import CapabilityType, MCPRuntime, RefreshPolicy, ResiliencePolicy
 
 
 async def main() -> None:
     with tempfile.TemporaryDirectory() as directory:
         note = Path(directory) / "release-notes.md"
-        note.write_text("# 0.2.0\nRouted through MCP.", encoding="utf-8")
-        server = NpxStdioTransport(
-            "@modelcontextprotocol/server-filesystem", [directory]
-        )
-        async with MCPRuntime(operation_timeout=120) as runtime:
+        note.write_text("# 1.0.0\nRouted through MCP.", encoding="utf-8")
+        server = NpxStdioTransport("@modelcontextprotocol/server-filesystem", [directory])
+        async with MCPRuntime(resilience=ResiliencePolicy(operation_timeout=120)) as runtime:
             await runtime.register_mcp(
                 "filesystem", server, refresh=RefreshPolicy(on_register=True)
             )

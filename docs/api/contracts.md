@@ -11,3 +11,11 @@
 ::: mcp_capability_router.Operation
 
 ::: mcp_capability_router.OperationContext
+
+::: mcp_capability_router.AdapterFactory
+
+::: mcp_capability_router.CallNext
+
+::: mcp_capability_router.InterceptorFunction
+
+::: mcp_capability_router.InterceptorLike

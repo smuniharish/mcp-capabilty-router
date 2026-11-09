@@ -23,9 +23,7 @@ from mcp_capability_router import CapabilityRoutingMiddleware, MCPRuntime, Refre
 async with MCPRuntime() as runtime:
     policy = RefreshPolicy(on_register=True, on_query_miss=True)
     await runtime.register_mcp("crm", "https://crm.example.com/mcp", refresh=policy)
-    await runtime.register_mcp(
-        "billing", "https://billing.example.com/mcp", refresh=policy
-    )
+    await runtime.register_mcp("billing", "https://billing.example.com/mcp", refresh=policy)
 
     agent = create_agent(
         "openai:gpt-5.4-mini",

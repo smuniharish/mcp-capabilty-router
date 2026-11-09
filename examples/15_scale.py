@@ -6,18 +6,19 @@ only ever see the handful of tools that retrieval returns.
 """
 
 import asyncio
+import functools
 from collections.abc import Mapping
 from typing import Any
 
 from mcp import types
 
-from mcp_capability_router import CapabilityType, MCPRuntime
+from mcp_capability_router import CapabilityType, MCPAdapter, MCPRuntime
 
 DOMAINS = ("files", "issues", "invoices", "emails", "calendars")
 VERBS = ("list", "read", "create", "update", "delete")
 
 
-class GeneratedServer:
+class GeneratedServer(MCPAdapter):
     """An in-memory MCP adapter with 500 generated tools."""
 
     def __init__(self, number: int) -> None:
@@ -62,7 +63,7 @@ async def main() -> None:
     async with MCPRuntime() as runtime:
         for number in range(20):
             await runtime.register_server(
-                f"server-{number:02}", lambda number=number: GeneratedServer(number)
+                f"server-{number:02}", functools.partial(GeneratedServer, number)
             )
         results = await runtime.refresh()
         total = sum(result.added_count for result in results.values())

@@ -21,7 +21,8 @@ from ._internal.naming import (
     validate_server_id,
 )
 from ._internal.tools import capability_tool
-from .models import CapabilityType, Tool, make_capability_id
+from .errors import ConfigurationError
+from .models import Capability, CapabilityType, Tool, make_capability_id
 
 if TYPE_CHECKING:
     from langgraph.types import Command
@@ -77,7 +78,12 @@ class CapabilityRoutingMiddleware(AgentMiddleware):
     """
 
     def __init__(
-        self, runtime: MCPRuntime, *, limit: int = 5, server_id: str | None = None
+        self,
+        runtime: MCPRuntime,
+        *,
+        limit: int = 5,
+        server_id: str | None = None,
+        where: Callable[[Tool], bool] | None = None,
     ) -> None:
         """Create the middleware.
 
@@ -85,16 +91,21 @@ class CapabilityRoutingMiddleware(AgentMiddleware):
             runtime: The runtime that retrieves and calls the tools.
             limit: The maximum number of routed tools per model call.
             server_id: Route only the tools of this server.
+            where: Route only the tools for which it returns `True`, for example
+                `lambda tool: not tool.destructive` to keep tools that the server
+                marks as destructive away from the model.
 
         Raises:
-            ConfigurationError: If `limit` or `server_id` is invalid.
+            ConfigurationError: If `limit`, `server_id`, or `where` is invalid.
         """
         super().__init__()
         self._runtime = runtime
         self._limit = validate_limit(limit)
-        self._server_id = (
-            validate_server_id(server_id) if server_id is not None else None
-        )
+        self._server_id = validate_server_id(server_id) if server_id is not None else None
+        if where is not None and not callable(where):
+            msg = f"where {where!r} is not callable"
+            raise ConfigurationError(msg)
+        self._where = where
 
     async def awrap_model_call(
         self,
@@ -109,10 +120,9 @@ class CapabilityRoutingMiddleware(AgentMiddleware):
                 type=CapabilityType.TOOL,
                 server_id=self._server_id,
                 limit=self._limit,
+                where=self._allows,
             )
-            present = {
-                tool.name for tool in request.tools if isinstance(tool, BaseTool)
-            }
+            present = {tool.name for tool in request.tools if isinstance(tool, BaseTool)}
             routed = [
                 self._tool(capability)
                 for capability in capabilities
@@ -145,6 +155,9 @@ class CapabilityRoutingMiddleware(AgentMiddleware):
             request = request.override(tool=self._tool(matches[0]))
         return await handler(request)
 
+    def _allows(self, capability: Capability) -> bool:
+        return isinstance(capability, Tool) and (self._where is None or self._where(capability))
+
     def _tool(self, capability: Tool) -> StructuredTool:
         name = (
             capability.name
@@ -159,11 +172,13 @@ class CapabilityRoutingMiddleware(AgentMiddleware):
             if self._server_id is not None
             else split_qualified_tool_name(name, self._runtime.servers)
         )
-        matches: list[Tool] = []
-        for server_id, tool_name in candidates:
-            capability = await self._runtime.registry.get(
-                make_capability_id(server_id, CapabilityType.TOOL, tool_name)
-            )
-            if isinstance(capability, Tool):
-                matches.append(capability)
-        return matches
+        ids = [
+            make_capability_id(server_id, CapabilityType.TOOL, tool_name)
+            for server_id, tool_name in candidates
+        ]
+        found = await self._runtime.registry.get_many(ids)
+        return [
+            capability
+            for key in ids
+            if isinstance(capability := found.get(key), Tool) and self._allows(capability)
+        ]

@@ -30,6 +30,7 @@ REQUIRES = {
     "12_agent_swarm.py": "MCP_ROUTER_EXAMPLE_MODEL",
     "13_postgres_registry.py": "MCP_ROUTER_EXAMPLE_POSTGRES_DSN",
     "14_stdio_servers.py": "MCP_ROUTER_EXAMPLE_NODE",
+    "17_redis_shared_state.py": "MCP_ROUTER_EXAMPLE_REDIS_URL",
 }
 VARIABLE_OUTPUT = {
     "08_semantic_retrieval.py",
@@ -37,14 +38,16 @@ VARIABLE_OUTPUT = {
     "11_deep_agent.py",
     "12_agent_swarm.py",
     "14_stdio_servers.py",
+    "18_hybrid_retrieval.py",
 }
-# langsmith, a LangChain dependency, calls asyncio.iscoroutinefunction, which Python
-# 3.14 deprecates; every other warning is an error.
+# Limit warning filters to known third-party import-time checks.
 WARNING_OPTIONS = (
     "-W",
     "error",
     "-W",
-    "ignore:'asyncio.iscoroutinefunction' is deprecated:DeprecationWarning",
+    "ignore:'asyncio.iscoroutinefunction':DeprecationWarning",
+    "-W",
+    "ignore:<class 'key_value.:DeprecationWarning",
 )
 
 
@@ -56,6 +59,7 @@ def run(example: Path) -> subprocess.CompletedProcess[str]:
         text=True,
         encoding="utf-8",
         env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"},
+        timeout=180,
         check=False,
     )
 
@@ -79,9 +83,7 @@ def check(example: Path, update: bool) -> bool:
         expected_path.write_text(stdout, encoding="utf-8", newline="\n")
         print(f"wrote {expected_path.relative_to(ROOT).as_posix()}")
         return True
-    expected = (
-        expected_path.read_text(encoding="utf-8") if expected_path.exists() else ""
-    )
+    expected = expected_path.read_text(encoding="utf-8") if expected_path.exists() else ""
     if stdout == expected:
         print(f"ok    {example.name}")
         return True
@@ -99,9 +101,7 @@ def check(example: Path, update: bool) -> bool:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run and verify the examples.")
-    parser.add_argument(
-        "--update", action="store_true", help="rewrite the expected output files"
-    )
+    parser.add_argument("--update", action="store_true", help="rewrite the expected output files")
     arguments = parser.parse_args()
     failures = 0
     for example in sorted(EXAMPLES.glob("[0-9][0-9]_*.py")):

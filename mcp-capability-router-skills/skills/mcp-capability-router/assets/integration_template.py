@@ -11,14 +11,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from aiolimiter import AsyncLimiter
 from fastmcp import FastMCP
 from langchain.agents import create_agent
-from langchain_core.language_models import BaseChatModel
 from refresh_engine import InMemoryMetrics
 from tenacity import (
     AsyncRetrying,
@@ -35,8 +33,14 @@ from mcp_capability_router import (
     Operation,
     OperationContext,
     RefreshPolicy,
+    ResiliencePolicy,
     is_retryable,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator, Awaitable, Callable
+
+    from langchain_core.language_models import BaseChatModel
 
 # Adapt: tools that may change data and are allowed anyway.
 ALLOWED_WRITES = frozenset({"helpdesk:tool:close_ticket"})
@@ -88,13 +92,15 @@ async def open_runtime(metrics: InMemoryMetrics) -> AsyncGenerator[MCPRuntime, N
     """Create a runtime with production settings, and register its servers."""
     runtime = MCPRuntime(
         max_concurrency=32,
-        operation_timeout=30,
-        retry=AsyncRetrying(
-            stop=stop_after_attempt(3),
-            wait=wait_exponential_jitter(initial=0.2, max=5),
-            retry=retry_if_exception(is_retryable),
+        resilience=ResiliencePolicy(
+            operation_timeout=30,
+            retry=AsyncRetrying(
+                stop=stop_after_attempt(3),
+                wait=wait_exponential_jitter(multiplier=0.2, max=5),
+                retry=retry_if_exception(is_retryable),
+            ),
+            rate_limiter=AsyncLimiter(100, time_period=1),
         ),
-        rate_limiter=AsyncLimiter(100, time_period=1),
         interceptors=[enforce_write_policy],
         # Adapt: use a sink that exports to the monitoring system.
         metrics=metrics,

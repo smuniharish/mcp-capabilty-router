@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 import pytest
-from langchain_core.callbacks import Callbacks
 from langchain_core.documents import BaseDocumentCompressor, Document
 from langchain_core.embeddings import Embeddings
 from pydantic import Field
@@ -16,6 +15,11 @@ from mcp_capability_router import (
     Tool,
 )
 from tests.support import capability_ids, resource, tool
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from langchain_core.callbacks import Callbacks
 
 VOCABULARY = ("read", "file", "send", "email", "weather", "forecast", "notes")
 

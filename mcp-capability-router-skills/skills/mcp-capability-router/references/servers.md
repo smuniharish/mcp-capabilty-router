@@ -20,7 +20,7 @@ from fastmcp.client.transports import NpxStdioTransport
 
 from mcp_capability_router import MCPRuntime, RefreshPolicy
 
-async with MCPRuntime(operation_timeout=30) as runtime:
+async with MCPRuntime(resilience=ResiliencePolicy(operation_timeout=30)) as runtime:
     policy = RefreshPolicy(on_register=True)
     await runtime.register_mcp(
         "docs", Client("https://docs.example.com/mcp", auth=token), refresh=policy

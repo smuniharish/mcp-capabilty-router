@@ -9,6 +9,7 @@ Run these from the repository root:
 
 ```bash
 uvx --from skills-ref==0.1.1 agentskills validate mcp-capability-router-skills/skills/mcp-capability-router
+uv run pytest tests/skill
 uv run python scripts/check_docs.py
 uv run ruff check mcp-capability-router-skills
 uv run pyrefly check
@@ -22,6 +23,8 @@ uv run pyrefly check
   imports of non-public names, checks that `metadata.version` matches the package, and
   resolves every link.
 - `ruff` and `pyrefly` lint and type-check the template.
+- `tests/skill` validates both skills, their links and balanced evaluation data,
+  setup checks, and the registry contract template.
 
 ## Review checklist
 

@@ -12,7 +12,13 @@ from langchain_core.messages import ToolMessage
 from langchain_core.tools import StructuredTool, ToolException
 
 from ._internal.translation import translated
-from .errors import InvalidRequestError, ProtocolError, ToolExecutionError
+from .contracts import MCPAdapter
+from .errors import (
+    ConfigurationError,
+    InvalidRequestError,
+    ProtocolError,
+    ToolExecutionError,
+)
 
 if TYPE_CHECKING:
     from fastmcp import Client, FastMCP
@@ -20,9 +26,7 @@ if TYPE_CHECKING:
     from langchain_core.tools import BaseTool
     from mcp import types
 
-type FastMCPTarget = (
-    Client[Any] | ClientTransport | FastMCP | str | Path | Mapping[str, Any]
-)
+type FastMCPTarget = Client[Any] | ClientTransport | FastMCP | str | Path | Mapping[str, Any]
 """Anything that `fastmcp.Client` accepts: a URL, a script path, an MCP
 configuration dictionary, an in-process `FastMCP` server, a transport, or a
 client."""
@@ -38,7 +42,7 @@ async def _as_langchain_tool(definition: types.Tool, client: Client[Any]) -> Bas
     return await as_langchain_tool(definition, client)
 
 
-class FastMCPAdapter:
+class FastMCPAdapter(MCPAdapter):
     """Connects the runtime to an MCP server through a FastMCP client.
 
     Works with every server and transport that FastMCP supports: Streamable HTTP
@@ -64,17 +68,32 @@ class FastMCPAdapter:
     `ServerError` subclasses, so the resilience pipeline classifies them.
     """
 
-    def __init__(self, target: FastMCPTarget) -> None:
+    def __init__(self, target: FastMCPTarget, **client_options: Any) -> None:
         """Create an adapter for `target`.
 
         Args:
             target: A `fastmcp.Client`, or anything a `fastmcp.Client` accepts.
+            **client_options: Keyword arguments of the `fastmcp.Client` created
+                for `target`, such as `auth`, `timeout`, `init_timeout`,
+                `client_info`, `roots`, or the sampling, elicitation, logging,
+                progress, and message handlers.
+
+        Raises:
+            ConfigurationError: If `client_options` are given with a prebuilt
+                `fastmcp.Client`, which is configured already.
         """
         from fastmcp import Client
 
-        self._client: Client[Any] = (
-            target if isinstance(target, Client) else Client(cast("Any", target))
-        )
+        if isinstance(target, Client):
+            if client_options:
+                msg = (
+                    "client options cannot be applied to a prebuilt fastmcp.Client; "
+                    "configure the client instead"
+                )
+                raise ConfigurationError(msg)
+            self._client: Client[Any] = target
+        else:
+            self._client = Client(cast("Any", target), **client_options)
         self._definitions: dict[str, types.Tool] = {}
         self._tools: dict[str, BaseTool] = {}
         self._connected = False
@@ -105,9 +124,7 @@ class FastMCPAdapter:
         tools = await self._list("tools", self._client.list_tools)
         self._definitions = {tool.name: tool for tool in tools}
         self._tools = {
-            name: tool
-            for name, tool in self._tools.items()
-            if name in self._definitions
+            name: tool for name, tool in self._tools.items() if name in self._definitions
         }
         return tools
 
@@ -149,9 +166,7 @@ class FastMCPAdapter:
         """Read the resource at `uri`."""
         return await translated(self._client.read_resource(uri))
 
-    async def get_prompt(
-        self, name: str, arguments: Mapping[str, str]
-    ) -> types.GetPromptResult:
+    async def get_prompt(self, name: str, arguments: Mapping[str, str]) -> types.GetPromptResult:
         """Render the prompt `name` with `arguments`."""
         return await translated(self._client.get_prompt(name, dict(arguments)))
 
@@ -177,10 +192,7 @@ class FastMCPAdapter:
             return await translated(listing())
         except InvalidRequestError as error:
             cause = error.__cause__
-            if (
-                isinstance(cause, MCPError)
-                and cause.error.code == types.METHOD_NOT_FOUND
-            ):
+            if isinstance(cause, MCPError) and cause.error.code == types.METHOD_NOT_FOUND:
                 return []
             raise
 

@@ -13,9 +13,7 @@ from mcp_capability_router import MCPRuntime, RefreshPolicy
 
 async def main() -> None:
     async with MCPRuntime() as runtime:
-        await runtime.register_mcp(
-            "crm", crm_server(), refresh=RefreshPolicy(on_register=True)
-        )
+        await runtime.register_mcp("crm", crm_server(), refresh=RefreshPolicy(on_register=True))
         [match] = await runtime.retrieve("find a customer by name", limit=1)
         print(f"best match: {match.capability_id}")
 

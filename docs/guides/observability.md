@@ -5,8 +5,8 @@ states. None of them needs a particular monitoring stack.
 
 ## Metrics
 
-Pass a metrics sink to the runtime. A sink is any object with refresh-engine's
-`MetricsSink` methods, `increment` and `observe`; `refresh_engine.InMemoryMetrics` is
+Pass a metrics sink to the runtime. A sink subclasses refresh-engine's
+`MetricsSink` and implements async `increment` and `observe`; `refresh_engine.InMemoryMetrics` is
 a ready-made sink for tests and debugging:
 
 ```python
@@ -37,34 +37,18 @@ attribute added. A sink that fails is logged and never fails an operation.
 
 ### Export to Prometheus or OpenTelemetry
 
-Bridge the sink to your metrics library. This sink forwards to OpenTelemetry:
+Install `mcp-capability-router[otel]`. Use refresh-engine's ready-made sink with
+an application-owned meter provider:
 
 ```python
-from collections.abc import Mapping
+from opentelemetry.sdk.metrics import MeterProvider
+from refresh_engine.otel import OpenTelemetryMetricsSink
 
-from opentelemetry import metrics
+from mcp_capability_router import MCPRuntime
 
-meter = metrics.get_meter("mcp_capability_router")
-
-
-class OpenTelemetrySink:
-    def __init__(self) -> None:
-        self._counters: dict[str, metrics.Counter] = {}
-        self._histograms: dict[str, metrics.Histogram] = {}
-
-    def increment(
-        self, name: str, value: int = 1, attributes: Mapping[str, str] | None = None, /
-    ) -> None:
-        if name not in self._counters:
-            self._counters[name] = meter.create_counter(name)
-        self._counters[name].add(value, dict(attributes or {}))
-
-    def observe(
-        self, name: str, value: float, attributes: Mapping[str, str] | None = None, /
-    ) -> None:
-        if name not in self._histograms:
-            self._histograms[name] = meter.create_histogram(name)
-        self._histograms[name].record(value, dict(attributes or {}))
+provider = MeterProvider()
+sink = OpenTelemetryMetricsSink(provider.get_meter("mcp_capability_router"))
+runtime = MCPRuntime(metrics=sink)
 ```
 
 The [observability example](../examples.md#observability) bridges to
@@ -130,7 +114,24 @@ async def unhealthy_servers() -> list[str]:
 
 ## Tracing
 
-LangChain tracing, such as LangSmith, records the routed tool calls of agents like
-any other tool call. To trace server operations themselves, add an
-[interceptor](extending.md#interceptors) that opens a span around `call_next()`; it
-receives the server, the operation, and the capability of every operation.
+LangChain tracing, such as LangSmith, records routed agent tool calls. Trace all
+server operations with the optional MCP client-span interceptor:
+
+```python
+from opentelemetry.sdk.trace import TracerProvider
+
+from mcp_capability_router import MCPRuntime
+from mcp_capability_router.otel import OpenTelemetryInterceptor
+
+provider = TracerProvider()
+runtime = MCPRuntime(interceptors=[OpenTelemetryInterceptor(provider.get_tracer("my-service"))])
+```
+
+Spans include the method, server ID, and tool name or resource URI, never arguments
+or results. Errors set the span status and record the exception. Add the tracing
+interceptor before caching to include cache hits in the operation span.
+
+Providers, exporters, and their shutdown belong to the application. The
+[OpenTelemetry example](../examples.md#opentelemetry) shows in-memory inspection
+and OTLP export to a collector. Configure a metrics reader and a span processor
+before routing calls.

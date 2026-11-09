@@ -35,13 +35,14 @@ RUNTIME_DEPENDENCIES = {
     "tenacity",
 }
 DEVELOPMENT_PREFIXES = ("tests/", "examples/", "scripts/", "docs/", "benchmarks/")
-# langsmith, a LangChain dependency, calls asyncio.iscoroutinefunction, which Python
-# 3.14 deprecates; every other warning is an error.
+# Limit warning filters to known third-party import-time checks.
 WARNING_OPTIONS = (
     "-W",
     "error",
     "-W",
-    "ignore:'asyncio.iscoroutinefunction' is deprecated:DeprecationWarning",
+    "ignore:'asyncio.iscoroutinefunction':DeprecationWarning",
+    "-W",
+    "ignore:<class 'key_value.:DeprecationWarning",
 )
 
 SMOKE_TEST = """
@@ -51,7 +52,7 @@ import sys
 from fastmcp import FastMCP
 
 import mcp_capability_router
-from mcp_capability_router import MCPRuntime, RefreshPolicy
+from mcp_capability_router import MCPRuntime, RefreshPolicy, ResiliencePolicy
 
 server = FastMCP("smoke")
 
@@ -62,7 +63,7 @@ def echo(text: str) -> str:
 
 
 async def main() -> None:
-    async with MCPRuntime(operation_timeout=60) as runtime:
+    async with MCPRuntime(resilience=ResiliencePolicy(operation_timeout=60)) as runtime:
         await runtime.register_mcp(
             "smoke", server, refresh=RefreshPolicy(on_register=True)
         )
@@ -84,11 +85,7 @@ def fail(message: str) -> NoReturn:
 
 
 def project_version() -> str:
-    source = (ROOT / "src" / "mcp_capability_router" / "__init__.py").read_text("utf-8")
-    match = re.search(r'^__version__ = "([^"]+)"$', source, re.MULTILINE)
-    if match is None:
-        fail("cannot find __version__ in src/mcp_capability_router/__init__.py")
-    return match.group(1)
+    return tomllib.loads((ROOT / "pyproject.toml").read_text("utf-8"))["project"]["version"]
 
 
 def requirement_name(requirement: str) -> str:
@@ -101,9 +98,7 @@ def requirement_name(requirement: str) -> str:
 def validate_wheel(wheel: Path, version: str, requires_python: str) -> None:
     with zipfile.ZipFile(wheel) as archive:
         names = archive.namelist()
-        metadata_files = [
-            name for name in names if name.endswith(".dist-info/METADATA")
-        ]
+        metadata_files = [name for name in names if name.endswith(".dist-info/METADATA")]
         if len(metadata_files) != 1:
             fail("the wheel must contain exactly one METADATA file")
         metadata = email.message_from_bytes(archive.read(metadata_files[0]))
@@ -120,9 +115,7 @@ def specifiers(value: str | None) -> set[str]:
     return {item.strip() for item in (value or "").split(",") if item.strip()}
 
 
-def validate_metadata(
-    metadata: email.message.Message, version: str, requires_python: str
-) -> None:
+def validate_metadata(metadata: email.message.Message, version: str, requires_python: str) -> None:
     expected = {
         "Name": "mcp-capability-router",
         "Version": version,
@@ -183,13 +176,9 @@ def validate_sdist(sdist: Path) -> None:
 
 
 def smoke_test(wheel: Path, version: str, python: str) -> None:
-    with tempfile.TemporaryDirectory(
-        prefix="mcp-capability-router-smoke-"
-    ) as directory:
+    with tempfile.TemporaryDirectory(prefix="mcp-capability-router-smoke-") as directory:
         venv = Path(directory) / "venv"
-        subprocess.run(
-            ["uv", "venv", "--quiet", "--python", python, str(venv)], check=True
-        )
+        subprocess.run(["uv", "venv", "--quiet", "--python", python, str(venv)], check=True)
         executable = venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
         install = ["uv", "pip", "install", "--quiet", "--python", str(executable)]
         subprocess.run([*install, str(wheel)], check=True)

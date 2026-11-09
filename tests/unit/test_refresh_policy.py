@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING
 
 import pytest
 from refresh_engine import RefreshConfig, RefreshMode
 
 from mcp_capability_router import ConfigurationError, RefreshPolicy
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 
 def test_defaults_are_lazy() -> None:
@@ -17,6 +20,10 @@ def test_defaults_are_lazy() -> None:
     assert policy.change_events is None
     assert policy.mode is None
     assert policy.event_handlers == ()
+
+
+async def record(event: object) -> None:
+    """Accept an event."""
 
 
 async def test_accepts_queues_async_iterables_and_mode_names() -> None:
@@ -30,10 +37,10 @@ async def test_accepts_queues_async_iterables_and_mode_names() -> None:
         interval=0.5,
         mode="full",  # type: ignore[arg-type]
         config=RefreshConfig(max_concurrency=2),
-        event_handlers=[print],  # type: ignore[arg-type]
+        event_handlers=(record,),
     )
     assert policy.mode is RefreshMode.FULL
-    assert policy.event_handlers == (print,)
+    assert policy.event_handlers == (record,)
 
 
 @pytest.mark.parametrize("interval", [0, -1, float("inf"), float("nan"), True, "5"])
@@ -49,5 +56,5 @@ def test_rejects_invalid_values() -> None:
         RefreshPolicy(mode="sometimes")  # type: ignore[arg-type]
     with pytest.raises(ConfigurationError, match="TARGETED"):
         RefreshPolicy(mode=RefreshMode.TARGETED)
-    with pytest.raises(ConfigurationError, match="not callable"):
+    with pytest.raises(ConfigurationError, match=r"must subclass refresh_engine\.EventHandler"):
         RefreshPolicy(event_handlers=(42,))  # type: ignore[arg-type]

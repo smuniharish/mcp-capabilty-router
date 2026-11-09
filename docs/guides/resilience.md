@@ -21,17 +21,19 @@ from tenacity import (
     wait_exponential_jitter,
 )
 
-from mcp_capability_router import MCPRuntime, is_retryable
+from mcp_capability_router import MCPRuntime, ResiliencePolicy, is_retryable
 
 runtime = MCPRuntime(
     max_concurrency=32,
-    operation_timeout=30,
-    retry=AsyncRetrying(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential_jitter(initial=0.2, max=5),
-        retry=retry_if_exception(is_retryable),
+    resilience=ResiliencePolicy(
+        operation_timeout=30,
+        retry=AsyncRetrying(
+            stop=stop_after_attempt(3),
+            wait=wait_exponential_jitter(multiplier=0.2, max=5),
+            retry=retry_if_exception(is_retryable),
+        ),
+        rate_limiter=AsyncLimiter(100, time_period=1),
     ),
-    rate_limiter=AsyncLimiter(100, time_period=1),
 )
 ```
 
@@ -58,6 +60,17 @@ answering holds a concurrency slot indefinitely.
 and how long to wait between them. The runtime always re-raises the error of the last
 attempt, never a tenacity `RetryError`. Use `retry_if_exception(is_retryable)` as the
 predicate, so that only failures that can pass on another attempt are retried.
+
+Tool calls are retried only when marked read-only or idempotent by their server.
+`retry_unsafe_tools=True` explicitly permits other tool retries; use it only when
+your application can prevent duplicate effects. Resources and prompts remain
+eligible for the configured retry policy.
+
+Pass `resilience=ResiliencePolicy(...)` to `register_server` or `register_mcp` to
+override the runtime policy for one server. This replaces the policy rather than
+merging its fields; use `dataclasses.replace(runtime.resilience, ...)` to vary only
+selected fields. A policy's `max_concurrency` limits that server in addition to
+the runtime-wide limit.
 
 ## Failure classification
 
@@ -144,11 +157,12 @@ breakers = AsyncCircuitBreakerFactory(
     default_ttl=60,
     uow=AsyncRedisUnitOfWork("redis://localhost:6379/0"),
 )
-await breakers.initialize()
-runtime = MCPRuntime(circuit_breaker=breakers)
+runtime = MCPRuntime(resilience=ResiliencePolicy(circuit_breaker=breakers))
 ```
 
-Install `purgatory[redis]` for Redis storage. A shared factory keys circuits by
+Install `mcp-capability-router[redis]` for Redis storage. The runtime initializes
+each factory before use; the application owns and closes the Redis unit of work.
+A shared factory keys circuits by
 server ID and operation, so share it only between runtimes that register the same
 servers under the same IDs, such as replicas of one service. Exceptions excluded with
 the factory's `exclude` argument never count as failures, before the router's own
@@ -166,8 +180,8 @@ Two behaviors come from purgatory and are worth knowing:
 ## Rate limits
 
 `rate_limiter` takes an aiolimiter `AsyncLimiter`, which every attempt of every
-operation waits for. To limit servers separately, use an interceptor with a limiter
-per server; interceptors run once per operation:
+operation waits for. A per-server `ResiliencePolicy(rate_limiter=...)` applies to
+each attempt on that server. Interceptors can instead limit whole operations:
 
 ```python
 from collections.abc import Awaitable, Callable

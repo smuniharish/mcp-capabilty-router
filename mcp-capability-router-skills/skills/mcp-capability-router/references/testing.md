@@ -52,9 +52,7 @@ model = ScriptedModel(
         [
             AIMessage(
                 "",
-                tool_calls=[
-                    {"name": "search_tickets", "args": {"text": "VPN"}, "id": "1"}
-                ],
+                tool_calls=[{"name": "search_tickets", "args": {"text": "VPN"}, "id": "1"}],
             ),
             AIMessage("Ticket T-2 mentions the VPN."),
         ]
@@ -65,9 +63,7 @@ agent = create_agent(
     tools=[],
     middleware=[CapabilityRoutingMiddleware(runtime, server_id="support")],
 )
-result = await agent.ainvoke(
-    {"messages": [{"role": "user", "content": "VPN tickets?"}]}
-)
+result = await agent.ainvoke({"messages": [{"role": "user", "content": "VPN tickets?"}]})
 ```
 
 Assert on the `ToolMessage`s in `result["messages"]`: `name`, `status`, and `text`.
@@ -80,7 +76,7 @@ Wait for events instead of sleeping:
 refreshed = asyncio.Event()
 
 
-def on_event(event: RefreshEvent) -> None:
+async def on_event(event: RefreshEvent) -> None:
     if event.kind is EventKind.REFRESH_COMPLETED:
         refreshed.set()
 

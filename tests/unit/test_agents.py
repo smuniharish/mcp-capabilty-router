@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from langchain.agents import create_agent
@@ -26,6 +25,9 @@ from tests.support import (
     tool_messages,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
 SEARCH_SCHEMA = {"type": "object", "properties": {"q": {"type": "string"}}}
 
 
@@ -39,9 +41,7 @@ def crm() -> FakeAdapter:
 
 
 def billing() -> FakeAdapter:
-    return FakeAdapter(
-        tools=[mcp_tool("search", "Search invoices", input_schema=SEARCH_SCHEMA)]
-    )
+    return FakeAdapter(tools=[mcp_tool("search", "Search invoices", input_schema=SEARCH_SCHEMA)])
 
 
 @pytest.fixture
@@ -53,18 +53,14 @@ async def runtime() -> AsyncIterator[MCPRuntime]:
         yield instance
 
 
-def tool_call(
-    name: str, args: dict[str, Any], call_id: str = "call-1"
-) -> dict[str, Any]:
+def tool_call(name: str, args: dict[str, Any], call_id: str = "call-1") -> dict[str, Any]:
     return {"name": name, "args": args, "id": call_id, "type": "tool_call"}
 
 
 class TestCapabilityTool:
     async def test_returns_content_and_artifact_of_tool_messages(self) -> None:
         class Runtime:
-            async def execute(
-                self, capability_id: str, arguments: dict[str, Any]
-            ) -> Any:
+            async def execute(self, capability_id: str, arguments: dict[str, Any]) -> Any:
                 return ToolMessage(
                     content="42", artifact={"structured_content": 42}, tool_call_id="x"
                 )
@@ -73,9 +69,7 @@ class TestCapabilityTool:
         message = await routed.ainvoke(tool_call("answer", {}))
         assert (message.content, message.artifact) == ("42", {"structured_content": 42})
 
-    async def test_reports_router_errors_to_the_model(
-        self, runtime: MCPRuntime
-    ) -> None:
+    async def test_reports_router_errors_to_the_model(self, runtime: MCPRuntime) -> None:
         adapter = await runtime._servers["crm"].handle.adapter()
         adapter.failures["call_tool"] = [ServerConnectionError("crm is down")]  # type: ignore[attr-defined]
         routed = await runtime.as_tool("crm:tool:search")
@@ -87,17 +81,14 @@ class TestCapabilityTool:
         received: list[dict[str, Any]] = []
 
         class Runtime:
-            async def execute(
-                self, capability_id: str, arguments: dict[str, Any]
-            ) -> Any:
+            async def execute(self, capability_id: str, arguments: dict[str, Any]) -> Any:
                 received.append(arguments)
                 return "ok"
 
         schema = {
             "type": "object",
             "properties": {
-                name: {"type": "string"}
-                for name in ("config", "run_manager", "callbacks", "q")
+                name: {"type": "string"} for name in ("config", "run_manager", "callbacks", "q")
             },
         }
         routed = capability_tool(
@@ -114,19 +105,14 @@ class TestCapabilityTool:
         [
             (
                 "call_tool on server 's' exceeded the operation timeout of 1s",
-                "TimeoutError: call_tool on server 's' exceeded the operation "
-                "timeout of 1s",
+                "TimeoutError: call_tool on server 's' exceeded the operation timeout of 1s",
             ),
             (None, "TimeoutError"),
         ],
     )
-    async def test_reports_timeouts_to_the_model(
-        self, note: str | None, content: str
-    ) -> None:
+    async def test_reports_timeouts_to_the_model(self, note: str | None, content: str) -> None:
         class Runtime:
-            async def execute(
-                self, capability_id: str, arguments: dict[str, Any]
-            ) -> Any:
+            async def execute(self, capability_id: str, arguments: dict[str, Any]) -> Any:
                 error = TimeoutError()
                 if note is not None:
                     error.add_note(note)
@@ -137,9 +123,7 @@ class TestCapabilityTool:
         assert message.status == "error"
         assert message.content == content
 
-    async def test_plain_results_and_fallback_descriptions(
-        self, runtime: MCPRuntime
-    ) -> None:
+    async def test_plain_results_and_fallback_descriptions(self, runtime: MCPRuntime) -> None:
         routed = await runtime.as_tool("crm:tool:search")
         message = await routed.ainvoke(tool_call("search", {"q": "acme"}))
         assert message.content == '{"tool": "search", "arguments": {"q": "acme"}}'
@@ -186,9 +170,7 @@ class TestMiddleware:
     ) -> None:
         model = ScriptedChatModel(
             responses=[
-                AIMessage(
-                    content="", tool_calls=[tool_call("crm_search", {"q": "acme"})]
-                ),
+                AIMessage(content="", tool_calls=[tool_call("crm_search", {"q": "acme"})]),
                 AIMessage(content="Found acme."),
             ]
         )

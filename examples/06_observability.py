@@ -2,7 +2,9 @@
 
 The runtime reports counters and durations to any refresh-engine metrics sink:
 the pipeline metrics of every server operation, and the refresh metrics of every
-server. A sink is any object with `increment` and `observe` methods.
+server. A sink subclasses `refresh_engine.MetricsSink` and implements the async
+`increment` and `observe` methods. For OpenTelemetry metrics and traces, see
+`16_opentelemetry.py`.
 """
 
 import asyncio
@@ -11,12 +13,12 @@ from collections.abc import Mapping
 
 from common import billing_server, crm_server
 from prometheus_client import CollectorRegistry, Counter, Histogram, generate_latest
-from refresh_engine import InMemoryMetrics
+from refresh_engine import InMemoryMetrics, MetricsSink
 
 from mcp_capability_router import MCPRuntime, RefreshPolicy, ToolExecutionError
 
 
-class PrometheusSink:
+class PrometheusSink(MetricsSink):
     """Bridges refresh-engine metrics to prometheus_client."""
 
     def __init__(self, registry: CollectorRegistry) -> None:
@@ -28,56 +30,50 @@ class PrometheusSink:
     def _name(name: str) -> str:
         return name.replace(".", "_")
 
-    def increment(
+    async def increment(
         self, name: str, value: int = 1, attributes: Mapping[str, str] | None = None, /
     ) -> None:
         labels = dict(sorted((attributes or {}).items()))
         counter = self._counters.get(name)
         if counter is None:
-            counter = Counter(
-                self._name(name), name, list(labels), registry=self._registry
-            )
+            counter = Counter(self._name(name), name, list(labels), registry=self._registry)
             self._counters[name] = counter
         counter.labels(**labels).inc(value)
 
-    def observe(
+    async def observe(
         self, name: str, value: float, attributes: Mapping[str, str] | None = None, /
     ) -> None:
         labels = dict(sorted((attributes or {}).items()))
         histogram = self._histograms.get(name)
         if histogram is None:
-            histogram = Histogram(
-                self._name(name), name, list(labels), registry=self._registry
-            )
+            histogram = Histogram(self._name(name), name, list(labels), registry=self._registry)
             self._histograms[name] = histogram
         histogram.labels(**labels).observe(value)
 
 
-class Fanout:
+class Fanout(MetricsSink):
     """Sends every metric to several sinks."""
 
-    def __init__(self, *sinks: InMemoryMetrics | PrometheusSink) -> None:
+    def __init__(self, *sinks: MetricsSink) -> None:
         self._sinks = sinks
 
-    def increment(
+    async def increment(
         self, name: str, value: int = 1, attributes: Mapping[str, str] | None = None, /
     ) -> None:
         for sink in self._sinks:
-            sink.increment(name, value, attributes)
+            await sink.increment(name, value, attributes)
 
-    def observe(
+    async def observe(
         self, name: str, value: float, attributes: Mapping[str, str] | None = None, /
     ) -> None:
         for sink in self._sinks:
-            sink.observe(name, value, attributes)
+            await sink.observe(name, value, attributes)
 
 
 async def main() -> None:
     memory = InMemoryMetrics()
     prometheus = CollectorRegistry()
-    async with MCPRuntime(
-        metrics=Fanout(memory, PrometheusSink(prometheus))
-    ) as runtime:
+    async with MCPRuntime(metrics=Fanout(memory, PrometheusSink(prometheus))) as runtime:
         policy = RefreshPolicy(on_register=True)
         await runtime.register_mcp("crm", crm_server(), refresh=policy)
         await runtime.register_mcp("billing", billing_server(), refresh=policy)
@@ -91,9 +87,7 @@ async def main() -> None:
     counters, _ = memory.snapshot()
     print("in-memory counters:")
     for name in sorted(counters):
-        if name.startswith(
-            ("mcp_capability_router.operations", "refresh_engine.refreshes")
-        ):
+        if name.startswith(("mcp_capability_router.operations", "refresh_engine.refreshes")):
             print(f"  {name} = {counters[name]}")
 
     print("\nPrometheus exposition (counters):")

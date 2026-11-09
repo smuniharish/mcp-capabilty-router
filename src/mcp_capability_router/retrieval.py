@@ -6,16 +6,21 @@ import asyncio
 import heapq
 import math
 import re
-from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from langchain_core.documents import BaseDocumentCompressor, Document
 from langchain_core.embeddings import Embeddings
-from langchain_core.vectorstores import InMemoryVectorStore
+from langchain_core.vectorstores import InMemoryVectorStore, VectorStore
 
+from ._internal.concurrency import gather_or_cancel
 from ._internal.naming import validate_limit
+from .contracts import CapabilityRetriever
 from .errors import ConfigurationError
 from .models import Capability, Resource
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Iterator, Sequence
 
 _SEPARATORS = re.compile(r"[\W_]+")
 _CAMEL_CASE = re.compile(r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|[0-9]+")
@@ -117,7 +122,14 @@ def _lookup_keys(term: str) -> tuple[tuple[str, float], ...]:
     )
 
 
-class KeywordRetriever:
+def _positive(name: str, value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        msg = f"{name} must be a positive integer, got {value!r}"
+        raise ConfigurationError(msg)
+    return value
+
+
+class KeywordRetriever(CapabilityRetriever):
     """Ranks capabilities by the query words they contain.
 
     The default retriever of `MCPRuntime`. It needs no model and no service, is
@@ -180,18 +192,12 @@ class KeywordRetriever:
                 matches.append((capability, row))
         self._prune(candidates)
         total = len(candidates)
-        idf = [
-            math.log1p(total / frequency) if frequency else 0.0
-            for frequency in frequencies
-        ]
+        idf = [math.log1p(total / frequency) if frequency else 0.0 for frequency in frequencies]
         best_matches = heapq.nsmallest(
             limit,
             matches,
             key=lambda match: (
-                -sum(
-                    weight * factor
-                    for weight, factor in zip(match[1], idf, strict=True)
-                ),
+                -sum(weight * factor for weight, factor in zip(match[1], idf, strict=True)),
                 match[0].capability_id,
             ),
         )
@@ -199,9 +205,7 @@ class KeywordRetriever:
 
     def _index(self, capability: Capability) -> _Index:
         entry = self._cache.get(capability.capability_id)
-        if entry is None or (
-            entry.capability is not capability and entry.capability != capability
-        ):
+        if entry is None or (entry.capability is not capability and entry.capability != capability):
             entry = _Index.build(capability)
             self._cache[capability.capability_id] = entry
         return entry
@@ -210,9 +214,7 @@ class KeywordRetriever:
         """Drop cached indexes of capabilities that are no longer candidates."""
         if len(self._cache) > max(1024, 2 * len(candidates)):
             current = {capability.capability_id for capability in candidates}
-            self._cache = {
-                key: entry for key, entry in self._cache.items() if key in current
-            }
+            self._cache = {key: entry for key, entry in self._cache.items() if key in current}
 
 
 def _document_text(capability: Capability) -> str:
@@ -227,14 +229,16 @@ def _document_text(capability: Capability) -> str:
     return "\n".join(lines)
 
 
-class EmbeddingRetriever:
+class EmbeddingRetriever(CapabilityRetriever):
     """Ranks capabilities by semantic similarity, using any LangChain embeddings.
 
-    Capabilities are embedded once and re-embedded only when their text changes;
-    the vectors live in a LangChain `InMemoryVectorStore`. Each query embeds the
-    query text and returns the most similar candidates. A LangChain document
-    compressor, such as a cross-encoder reranker, can re-rank the best `fetch_k`
-    matches.
+    Capabilities are embedded once and re-embedded only when their text changes.
+    The vectors live in a LangChain vector store: an `InMemoryVectorStore` by
+    default, or any store such as pgvector, Qdrant, or Chroma, which lets several
+    processes share the vectors and a restarted process reuse them instead of
+    embedding every capability again. Each query embeds the query text and returns
+    the most similar candidates. A LangChain document compressor, such as a
+    cross-encoder reranker, can re-rank the best `fetch_k` matches.
 
     Example:
         ```python
@@ -247,8 +251,9 @@ class EmbeddingRetriever:
 
     def __init__(
         self,
-        embeddings: Embeddings,
+        embeddings: Embeddings | None = None,
         *,
+        vector_store: VectorStore | None = None,
         reranker: BaseDocumentCompressor | None = None,
         fetch_k: int = 20,
         max_documents: int = 50_000,
@@ -256,7 +261,12 @@ class EmbeddingRetriever:
         """Create a retriever.
 
         Args:
-            embeddings: The embedding model.
+            embeddings: The embedding model; the `embeddings` of `vector_store`
+                when `None`.
+            vector_store: Where the capability vectors are stored; an
+                `InMemoryVectorStore` of `embeddings` when `None`. The retriever
+                adds, replaces, and deletes documents whose IDs are capability IDs,
+                so give it a store, or a collection, of its own.
             reranker: An optional document compressor that re-ranks the matches.
             fetch_k: Number of matches handed to the reranker; ignored without one.
             max_documents: Number of capability vectors to keep. When exceeded, the
@@ -264,26 +274,33 @@ class EmbeddingRetriever:
                 candidates of the current query are always kept.
 
         Raises:
-            ConfigurationError: If `fetch_k` or `max_documents` is not positive.
+            ConfigurationError: If neither `embeddings` nor `vector_store` is
+                given, or `fetch_k` or `max_documents` is not positive.
         """
-        if isinstance(fetch_k, bool) or not isinstance(fetch_k, int) or fetch_k < 1:
-            msg = f"fetch_k must be a positive integer, got {fetch_k!r}"
+        self._fetch_k = _positive("fetch_k", fetch_k)
+        self._max_documents = _positive("max_documents", max_documents)
+        if vector_store is not None and not isinstance(vector_store, VectorStore):
+            msg = f"vector_store {vector_store!r} does not subclass VectorStore"
             raise ConfigurationError(msg)
-        if (
-            isinstance(max_documents, bool)
-            or not isinstance(max_documents, int)
-            or max_documents < 1
-        ):
-            msg = f"max_documents must be a positive integer, got {max_documents!r}"
+        if embeddings is not None and not isinstance(embeddings, Embeddings):
+            msg = f"embeddings {embeddings!r} does not subclass Embeddings"
             raise ConfigurationError(msg)
-        self._store = InMemoryVectorStore(embeddings)
+        if vector_store is None:
+            if embeddings is None:
+                msg = "EmbeddingRetriever needs embeddings or a vector_store"
+                raise ConfigurationError(msg)
+            vector_store = InMemoryVectorStore(embeddings)
+        self._store = vector_store
         self._reranker = reranker
-        self._fetch_k = fetch_k
-        self._max_documents = max_documents
         self._texts: dict[str, str] = {}
         self._seen: dict[str, int] = {}
         self._queries = 0
         self._lock = asyncio.Lock()
+
+    @property
+    def vector_store(self) -> VectorStore:
+        """The vector store that holds the capability vectors."""
+        return self._store
 
     async def retrieve(
         self, query: str, candidates: Sequence[Capability], *, limit: int
@@ -299,26 +316,37 @@ class EmbeddingRetriever:
         await self._index(candidates)
         by_id = {capability.capability_id: capability for capability in candidates}
         k = max(limit, self._fetch_k) if self._reranker is not None else limit
-        documents: Sequence[Document] = await self._store.asimilarity_search(
-            query, k=k, filter=lambda document: document.id in by_id
-        )
+        documents = await self._search(query, by_id, k)
         if self._reranker is not None:
             documents = await self._reranker.acompress_documents(documents, query)
-        ranked = (
-            by_id.get(str(document.metadata.get("capability_id", "")))
-            for document in documents
-        )
+        ranked = (by_id.get(_capability_id(document)) for document in documents)
         return [capability for capability in ranked if capability is not None][:limit]
+
+    async def _search(self, query: str, by_id: dict[str, Capability], k: int) -> Sequence[Document]:
+        k = min(k, len(by_id))
+        if isinstance(self._store, InMemoryVectorStore):
+            return await self._store.asimilarity_search(
+                query, k=k, filter=lambda document: document.id in by_id
+            )
+        # Vector stores filter by metadata in store-specific ways, so the search
+        # oversamples and keeps the candidates, widening until enough are found or
+        # the store has no more documents.
+        fetch = min(max(k * 4, k + 16), len(self._texts))
+        while True:
+            documents = await self._store.asimilarity_search(query, k=fetch)
+            matches = [doc for doc in documents if _capability_id(doc) in by_id]
+            if len(matches) >= k or len(documents) < fetch or fetch >= len(self._texts):
+                return matches[:k]
+            fetch = min(fetch * 4, len(self._texts))
 
     async def _index(self, candidates: Sequence[Capability]) -> None:
         async with self._lock:
             self._queries += 1
-            changed: dict[str, str] = {}
-            for capability in candidates:
-                capability_id = capability.capability_id
-                text = _document_text(capability)
-                if self._texts.get(capability_id) != text:
-                    changed[capability_id] = text
+            texts = {
+                capability.capability_id: _document_text(capability) for capability in candidates
+            }
+            await self._recover([key for key in texts if key not in self._texts])
+            changed = {key: text for key, text in texts.items() if self._texts.get(key) != text}
             if changed:
                 await self._store.aadd_documents(
                     [
@@ -334,8 +362,8 @@ class EmbeddingRetriever:
                 self._texts.update(changed)
             # Only stored capabilities are tracked, so a failed embedding call
             # leaves the retriever as it was.
-            for capability in candidates:
-                self._seen[capability.capability_id] = self._queries
+            for capability_id in texts:
+                self._seen[capability_id] = self._queries
             overflow = len(self._texts) - self._max_documents
             if overflow > 0:
                 idle = [key for key, seen in self._seen.items() if seen < self._queries]
@@ -345,3 +373,113 @@ class EmbeddingRetriever:
                 for capability_id in stale:
                     del self._texts[capability_id]
                     del self._seen[capability_id]
+
+    async def _recover(self, capability_ids: list[str]) -> None:
+        """Learn the texts of capabilities that a persistent store already holds."""
+        if not capability_ids or isinstance(self._store, InMemoryVectorStore):
+            return
+        try:
+            documents = await self._store.aget_by_ids(capability_ids)
+        except NotImplementedError:
+            return
+        for document in documents:
+            capability_id = _capability_id(document)
+            if capability_id in capability_ids:
+                self._texts[capability_id] = document.page_content
+                self._seen.setdefault(capability_id, 0)
+
+
+def _capability_id(document: Document) -> str:
+    return str(document.metadata.get("capability_id") or document.id or "")
+
+
+class HybridRetriever(CapabilityRetriever):
+    """Fuses the rankings of several retrievers with reciprocal rank fusion.
+
+    Each retriever ranks the same candidates concurrently; a capability scores
+    `weight / (k + rank)` in each ranking that contains it, and the capabilities
+    with the highest total score win. Combining a `KeywordRetriever`, which finds
+    exact names, with an `EmbeddingRetriever`, which finds paraphrases, usually
+    beats either alone. Ties are broken by capability ID.
+
+    Example:
+        ```python
+        retriever = HybridRetriever(
+            [KeywordRetriever(), EmbeddingRetriever(embeddings)], weights=[1.0, 2.0]
+        )
+        ```
+    """
+
+    def __init__(
+        self,
+        retrievers: Iterable[CapabilityRetriever],
+        *,
+        weights: Iterable[float] | None = None,
+        k: int = 60,
+        fetch_k: int = 50,
+    ) -> None:
+        """Create a retriever.
+
+        Args:
+            retrievers: The retrievers to fuse; at least one.
+            weights: The weight of each retriever's ranking; 1 for every retriever
+                when `None`.
+            k: The rank constant of the fusion; larger values flatten the
+                difference between top and lower ranks.
+            fetch_k: How many matches to take from each retriever; at least the
+                requested limit.
+
+        Raises:
+            ConfigurationError: If an argument is invalid.
+        """
+        self._retrievers = tuple(retrievers)
+        if not self._retrievers:
+            msg = "HybridRetriever needs at least one retriever"
+            raise ConfigurationError(msg)
+        for retriever in self._retrievers:
+            if not isinstance(retriever, CapabilityRetriever):
+                msg = f"retriever {retriever!r} does not subclass CapabilityRetriever"
+                raise ConfigurationError(msg)
+        self._weights = (
+            tuple(float(weight) for weight in weights)
+            if weights is not None
+            else (1.0,) * len(self._retrievers)
+        )
+        if len(self._weights) != len(self._retrievers):
+            msg = f"got {len(self._weights)} weights for {len(self._retrievers)} retrievers"
+            raise ConfigurationError(msg)
+        if any(not math.isfinite(weight) or weight < 0 for weight in self._weights):
+            msg = f"weights must be finite and non-negative, got {self._weights!r}"
+            raise ConfigurationError(msg)
+        self._k = _positive("k", k)
+        self._fetch_k = _positive("fetch_k", fetch_k)
+
+    @property
+    def retrievers(self) -> tuple[CapabilityRetriever, ...]:
+        """The fused retrievers."""
+        return self._retrievers
+
+    async def retrieve(
+        self, query: str, candidates: Sequence[Capability], *, limit: int
+    ) -> list[Capability]:
+        """Return at most `limit` of `candidates`, best fused rank first.
+
+        Raises:
+            ConfigurationError: If `limit` is not a positive integer.
+        """
+        validate_limit(limit)
+        if not candidates:
+            return []
+        fetch = max(limit, self._fetch_k)
+        rankings: list[list[Capability]] = await gather_or_cancel(
+            *(retriever.retrieve(query, candidates, limit=fetch) for retriever in self._retrievers)
+        )
+        scores: dict[str, float] = {}
+        by_id: dict[str, Capability] = {}
+        for ranking, weight in zip(rankings, self._weights, strict=True):
+            for rank, capability in enumerate(ranking, start=1):
+                key = capability.capability_id
+                by_id[key] = capability
+                scores[key] = scores.get(key, 0.0) + weight / (self._k + rank)
+        best = heapq.nsmallest(limit, scores, key=lambda key: (-scores[key], key))
+        return [by_id[key] for key in best]

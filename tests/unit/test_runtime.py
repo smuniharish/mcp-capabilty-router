@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator, Iterable, Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from langchain_core.tools import StructuredTool
@@ -23,6 +22,7 @@ from mcp_capability_router import (
     MCPRuntime,
     RefreshError,
     RefreshPolicy,
+    ResiliencePolicy,
     RuntimeClosedError,
     ServerConnectionError,
     ServerNotFoundError,
@@ -35,6 +35,9 @@ from tests.support import (
     mcp_tool,
     tool,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator, Iterable, Mapping
 
 
 def catalog() -> FakeAdapter:
@@ -75,7 +78,7 @@ async def runtime() -> AsyncIterator[MCPRuntime]:
 class TestConstruction:
     @pytest.mark.parametrize("argument", ["registry", "retriever", "metrics"])
     def test_rejects_objects_without_the_contract(self, argument: str) -> None:
-        with pytest.raises(ConfigurationError, match="does not implement"):
+        with pytest.raises(ConfigurationError, match="does not subclass"):
             MCPRuntime(**{argument: object()})  # type: ignore[arg-type]
 
     async def test_defaults_and_custom_collaborators(self) -> None:
@@ -111,9 +114,7 @@ class TestRegistration:
             await runtime.register_server("crm", Factory())
 
     async def test_refresh_on_register(self, runtime: MCPRuntime) -> None:
-        await runtime.register_server(
-            "crm", Factory(), refresh=RefreshPolicy(on_register=True)
-        )
+        await runtime.register_server("crm", Factory(), refresh=RefreshPolicy(on_register=True))
         assert len(await runtime.registry.list()) == 4
 
     async def test_failed_refresh_on_register_undoes_the_registration(
@@ -125,9 +126,7 @@ class TestRegistration:
             return adapter
 
         with pytest.raises(RefreshError) as raised:
-            await runtime.register_server(
-                "crm", broken, refresh=RefreshPolicy(on_register=True)
-            )
+            await runtime.register_server("crm", broken, refresh=RefreshPolicy(on_register=True))
         assert isinstance(raised.value.__cause__, ServerConnectionError)
         assert raised.value.result.status is RefreshStatus.FAILED
         assert runtime.servers == ()
@@ -155,9 +154,7 @@ class TestRegistration:
                 )
         assert "failed registration of server 'crm'" in caplog.text
 
-    async def test_unregister_forgets_capabilities_and_closes(
-        self, runtime: MCPRuntime
-    ) -> None:
+    async def test_unregister_forgets_capabilities_and_closes(self, runtime: MCPRuntime) -> None:
         factory = Factory()
         await runtime.register_server("crm", factory)
         await runtime.refresh_server("crm")
@@ -182,9 +179,7 @@ class TestRegistration:
 
 
 class TestRefresh:
-    async def test_refresh_server_reconciles_the_registry(
-        self, runtime: MCPRuntime
-    ) -> None:
+    async def test_refresh_server_reconciles_the_registry(self, runtime: MCPRuntime) -> None:
         factory = Factory()
         await runtime.register_server("crm", factory)
         result = await runtime.refresh_server("crm")
@@ -205,23 +200,17 @@ class TestRefresh:
             RefreshMode.TARGETED,
             1,
         )
-        result = await runtime.refresh_server(
-            "crm", selector=TagSelector("tool", key="type")
-        )
+        result = await runtime.refresh_server("crm", selector=TagSelector("tool", key="type"))
         assert result.refreshed_count == 2
         with pytest.raises(ConfigurationError):
             await runtime.refresh_server("crm", mode=RefreshMode.TARGETED)
 
-    async def test_failed_discovery_raises_with_its_cause(
-        self, runtime: MCPRuntime
-    ) -> None:
+    async def test_failed_discovery_raises_with_its_cause(self, runtime: MCPRuntime) -> None:
         factory = Factory()
         await runtime.register_server("crm", factory)
         await runtime.connect("crm")
         factory.adapters[0].failures["list_prompts"] = [ValueError("listing failed")]
-        with pytest.raises(
-            RefreshError, match="refresh of server 'crm' failed"
-        ) as raised:
+        with pytest.raises(RefreshError, match="refresh of server 'crm' failed") as raised:
             await runtime.refresh_server("crm")
         assert isinstance(raised.value.__cause__, ValueError)
 
@@ -230,9 +219,7 @@ class TestRefresh:
         await runtime.register_server("b", Factory())
         results = await runtime.refresh()
         assert sorted(results) == ["a", "b"]
-        assert all(
-            result.status is RefreshStatus.SUCCESS for result in results.values()
-        )
+        assert all(result.status is RefreshStatus.SUCCESS for result in results.values())
 
         def broken() -> FakeAdapter:
             adapter = catalog()
@@ -244,9 +231,7 @@ class TestRefresh:
             await runtime.refresh()
         assert [type(error) for error in raised.value.exceptions] == [RefreshError]
 
-    async def test_refresh_all_propagates_base_exceptions(
-        self, runtime: MCPRuntime
-    ) -> None:
+    async def test_refresh_all_propagates_base_exceptions(self, runtime: MCPRuntime) -> None:
         class Abort(BaseException):
             pass
 
@@ -263,9 +248,7 @@ class TestRefresh:
         await runtime.register_server("crm", Factory())
         server = runtime._servers["crm"]
         await server.engine.close()
-        with pytest.raises(
-            ServerNotFoundError, match="unregistered during the refresh"
-        ):
+        with pytest.raises(ServerNotFoundError, match="unregistered during the refresh"):
             await runtime.refresh_server("crm")
         await runtime.close()
         with pytest.raises(RuntimeClosedError):
@@ -274,9 +257,7 @@ class TestRefresh:
 
 class TestRetrieval:
     async def test_retrieve_filters_and_validates(self, runtime: MCPRuntime) -> None:
-        await runtime.register_server(
-            "crm", Factory(), refresh=RefreshPolicy(on_register=True)
-        )
+        await runtime.register_server("crm", Factory(), refresh=RefreshPolicy(on_register=True))
         assert capability_ids(await runtime.retrieve("search records", limit=1)) == [
             "crm:tool:search"
         ]
@@ -289,25 +270,19 @@ class TestRetrieval:
         with pytest.raises(ConfigurationError):
             await runtime.retrieve("x", limit=0)
 
-    async def test_query_returns_matches_without_refreshing(
-        self, runtime: MCPRuntime
-    ) -> None:
+    async def test_query_returns_matches_without_refreshing(self, runtime: MCPRuntime) -> None:
         factory = Factory()
         await runtime.register_server(
             "crm", factory, refresh=RefreshPolicy(on_register=True, on_query_miss=True)
         )
         calls = len(factory.adapters[0].calls)
-        assert capability_ids(await runtime.query("search", limit=1)) == [
-            "crm:tool:search"
-        ]
+        assert capability_ids(await runtime.query("search", limit=1)) == ["crm:tool:search"]
         assert len(factory.adapters[0].calls) == calls
 
     async def test_query_refreshes_policy_and_hinted_servers_on_a_miss(
         self, runtime: MCPRuntime
     ) -> None:
-        await runtime.register_server(
-            "a", Factory(), refresh=RefreshPolicy(on_query_miss=True)
-        )
+        await runtime.register_server("a", Factory(), refresh=RefreshPolicy(on_query_miss=True))
         await runtime.register_server("b", Factory())
         found = await runtime.query("search", limit=5)
         assert capability_ids(found) == ["a:tool:search"]
@@ -327,9 +302,7 @@ class TestRetrieval:
             adapter.failures["list_tools"] = [ServerConnectionError("down")]
             return adapter
 
-        await runtime.register_server(
-            "crm", broken, refresh=RefreshPolicy(on_query_miss=True)
-        )
+        await runtime.register_server("crm", broken, refresh=RefreshPolicy(on_query_miss=True))
         with caplog.at_level(logging.WARNING, logger="mcp_capability_router"):
             assert await runtime.query("search") == []
         assert "Automatic query refresh of server 'crm' failed" in caplog.text
@@ -338,9 +311,7 @@ class TestRetrieval:
 class TestOperations:
     async def test_execute_read_and_render(self, runtime: MCPRuntime) -> None:
         factory = Factory()
-        await runtime.register_server(
-            "crm", factory, refresh=RefreshPolicy(on_register=True)
-        )
+        await runtime.register_server("crm", factory, refresh=RefreshPolicy(on_register=True))
         assert await runtime.execute("crm:tool:search", {"q": "x"}) == {
             "tool": "search",
             "arguments": {"q": "x"},
@@ -358,9 +329,7 @@ class TestOperations:
         assert factory.adapters[0].connects == 1
 
     async def test_type_and_argument_errors(self, runtime: MCPRuntime) -> None:
-        await runtime.register_server(
-            "crm", Factory(), refresh=RefreshPolicy(on_register=True)
-        )
+        await runtime.register_server("crm", Factory(), refresh=RefreshPolicy(on_register=True))
         with pytest.raises(CapabilityNotFoundError, match="refresh its server first"):
             await runtime.execute("crm:tool:missing")
         with pytest.raises(CapabilityTypeError, match="is a resource, not a tool"):
@@ -374,13 +343,9 @@ class TestOperations:
         with pytest.raises(InvalidRequestError, match="must be strings"):
             await runtime.get_prompt("crm:prompt:summarize", {"text": 3})  # type: ignore[dict-item]
 
-    async def test_lost_connections_reconnect_on_next_use(
-        self, runtime: MCPRuntime
-    ) -> None:
+    async def test_lost_connections_reconnect_on_next_use(self, runtime: MCPRuntime) -> None:
         factory = Factory()
-        await runtime.register_server(
-            "crm", factory, refresh=RefreshPolicy(on_register=True)
-        )
+        await runtime.register_server("crm", factory, refresh=RefreshPolicy(on_register=True))
         factory.adapters[0].failures["call_tool"] = [ServerConnectionError("lost")]
         with pytest.raises(ServerConnectionError):
             await runtime.execute("crm:tool:search")
@@ -389,9 +354,7 @@ class TestOperations:
         assert len(factory.adapters) == 2
 
     async def test_as_tool(self, runtime: MCPRuntime) -> None:
-        await runtime.register_server(
-            "crm", Factory(), refresh=RefreshPolicy(on_register=True)
-        )
+        await runtime.register_server("crm", Factory(), refresh=RefreshPolicy(on_register=True))
         routed = await runtime.as_tool("crm:tool:search")
         assert isinstance(routed, StructuredTool)
         assert (routed.name, routed.description) == ("search", "Search records")
@@ -399,9 +362,7 @@ class TestOperations:
             "capability_id": "crm:tool:search",
             "server_id": "crm",
         }
-        assert (await runtime.as_tool("crm:tool:search", name="crm_search")).name == (
-            "crm_search"
-        )
+        assert (await runtime.as_tool("crm:tool:search", name="crm_search")).name == ("crm_search")
 
     async def test_health(self, runtime: MCPRuntime) -> None:
         await runtime.register_server("crm", Factory())
@@ -414,9 +375,7 @@ class TestClose:
     async def test_close_is_idempotent_and_final(self) -> None:
         factory = Factory()
         runtime = MCPRuntime()
-        await runtime.register_server(
-            "crm", factory, refresh=RefreshPolicy(on_register=True)
-        )
+        await runtime.register_server("crm", factory, refresh=RefreshPolicy(on_register=True))
         await runtime.close()
         await runtime.close()
         assert factory.adapters[0].closes == 1
@@ -442,9 +401,7 @@ class TestClose:
 
         registry = Durable()
         async with MCPRuntime(registry=registry) as runtime:
-            await runtime.register_server(
-                "crm", Factory(), refresh=RefreshPolicy(on_register=True)
-            )
+            await runtime.register_server("crm", Factory(), refresh=RefreshPolicy(on_register=True))
         assert registry.closed
         assert len(await registry.list()) == 4
 
@@ -487,7 +444,9 @@ class TestClose:
         registry = Recording()
         breakers = AsyncCircuitBreakerFactory()
         adapter = StuckClose()
-        runtime = MCPRuntime(registry=registry, circuit_breaker=breakers)
+        runtime = MCPRuntime(
+            registry=registry, resilience=ResiliencePolicy(circuit_breaker=breakers)
+        )
         await runtime.register_server("crm", lambda: adapter)
         await runtime.connect("crm")
         closing = asyncio.create_task(runtime.close())
@@ -534,9 +493,7 @@ class TestConcurrentLifecycle:
     ) -> None:
         adapter = GatedDiscovery(failure)
         registering = asyncio.create_task(
-            runtime.register_server(
-                "crm", lambda: adapter, refresh=RefreshPolicy(on_register=True)
-            )
+            runtime.register_server("crm", lambda: adapter, refresh=RefreshPolicy(on_register=True))
         )
         await adapter.discovering.wait()
         assert runtime.servers == ("crm",)
@@ -551,18 +508,14 @@ class TestConcurrentLifecycle:
         await unregistering
         assert await runtime.registry.list() == []
         assert adapter.closes == 1
-        await runtime.register_server(
-            "crm", Factory(), refresh=RefreshPolicy(on_register=True)
-        )
+        await runtime.register_server("crm", Factory(), refresh=RefreshPolicy(on_register=True))
         assert len(await runtime.registry.list()) == 4
 
     async def test_close_during_registration_undoes_it(self) -> None:
         adapter = GatedDiscovery()
         runtime = MCPRuntime()
         registering = asyncio.create_task(
-            runtime.register_server(
-                "crm", lambda: adapter, refresh=RefreshPolicy(on_register=True)
-            )
+            runtime.register_server("crm", lambda: adapter, refresh=RefreshPolicy(on_register=True))
         )
         await adapter.discovering.wait()
         closing = asyncio.create_task(runtime.close())
@@ -592,9 +545,7 @@ class TestConcurrentLifecycle:
             return adapters[-1]
 
         runtime = MCPRuntime(max_concurrency=1)
-        await runtime.register_server(
-            "crm", factory, refresh=RefreshPolicy(on_register=True)
-        )
+        await runtime.register_server("crm", factory, refresh=RefreshPolicy(on_register=True))
         first = asyncio.create_task(runtime.execute("crm:tool:search"))
         await adapters[0].calling.wait()
         queued = asyncio.create_task(runtime.execute("crm:tool:search"))
@@ -613,9 +564,7 @@ class TestConcurrentLifecycle:
             [tool("crm", "retired"), tool("crm", "search"), tool("billing", "pay")]
         )
         async with MCPRuntime(registry=registry) as runtime:
-            await runtime.register_server(
-                "crm", Factory(), refresh=RefreshPolicy(on_register=True)
-            )
+            await runtime.register_server("crm", Factory(), refresh=RefreshPolicy(on_register=True))
             assert capability_ids(await registry.list()) == [
                 "billing:tool:pay",
                 "crm:prompt:summarize",
@@ -649,9 +598,7 @@ async def test_capability_records_survive_custom_registries() -> None:
 async def test_concurrent_operations_share_one_connection() -> None:
     factory = Factory()
     async with MCPRuntime() as runtime:
-        await runtime.register_server(
-            "crm", factory, refresh=RefreshPolicy(on_register=True)
-        )
+        await runtime.register_server("crm", factory, refresh=RefreshPolicy(on_register=True))
         await runtime.reconnect("crm")
         factory.adapters[-1].delay = 0.01
         await asyncio.gather(*(runtime.execute("crm:tool:search") for _ in range(10)))

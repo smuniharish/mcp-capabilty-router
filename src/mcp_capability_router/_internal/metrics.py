@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from typing import TYPE_CHECKING
 
 from refresh_engine import MetricsSink
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 logger = logging.getLogger("mcp_capability_router")
 
@@ -15,31 +18,31 @@ RETRIES = "mcp_capability_router.retries"
 CIRCUIT_TRANSITIONS = "mcp_capability_router.circuit.transitions"
 
 
-def increment(
+async def increment(
     sink: MetricsSink | None, name: str, value: int, attributes: Mapping[str, str]
 ) -> None:
     """Add `value` to a counter; a failing sink never breaks an operation."""
     if sink is None:
         return
     try:
-        sink.increment(name, value, attributes)
+        await sink.increment(name, value, attributes)
     except Exception:
         logger.exception("Metrics sink failed to record %s", name)
 
 
-def observe(
+async def observe(
     sink: MetricsSink | None, name: str, value: float, attributes: Mapping[str, str]
 ) -> None:
     """Record an observation; a failing sink never breaks an operation."""
     if sink is None:
         return
     try:
-        sink.observe(name, value, attributes)
+        await sink.observe(name, value, attributes)
     except Exception:
         logger.exception("Metrics sink failed to record %s", name)
 
 
-class ServerScopedSink:
+class ServerScopedSink(MetricsSink):
     """Adds the `server_id` attribute to the refresh metrics of one server."""
 
     def __init__(self, sink: MetricsSink, server_id: str) -> None:
@@ -47,7 +50,7 @@ class ServerScopedSink:
         self._sink = sink
         self._server_id = server_id
 
-    def increment(
+    async def increment(
         self,
         name: str,
         value: int = 1,
@@ -55,9 +58,9 @@ class ServerScopedSink:
         /,
     ) -> None:
         """Add `value` to the counter `name`."""
-        increment(self._sink, name, value, self._scoped(attributes))
+        await increment(self._sink, name, value, self._scoped(attributes))
 
-    def observe(
+    async def observe(
         self,
         name: str,
         value: float,
@@ -65,7 +68,7 @@ class ServerScopedSink:
         /,
     ) -> None:
         """Record one observation of `value` for the metric `name`."""
-        observe(self._sink, name, value, self._scoped(attributes))
+        await observe(self._sink, name, value, self._scoped(attributes))
 
     def _scoped(self, attributes: Mapping[str, str] | None) -> dict[str, str]:
         return {**(attributes or {}), "server_id": self._server_id}

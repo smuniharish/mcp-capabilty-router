@@ -3,26 +3,29 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import functools
+import inspect
 import logging
 import time
-from collections.abc import Awaitable, Callable, Sequence
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from aiolimiter import AsyncLimiter
 from purgatory import AsyncCircuitBreakerFactory
 from purgatory.domain.model import CLOSED, HALF_OPENED, OPENED, OpenedState
-from refresh_engine import MetricsSink
-from tenacity import AsyncRetrying
 
-from ..contracts import Interceptor, Operation, OperationContext
+from ..contracts import Interceptor, InterceptorLike, Operation, OperationContext
 from ..errors import CircuitOpenError, ConfigurationError
-from ..models import HealthState
-from ..resilience import is_retryable
+from ..models import HealthState, Tool
+from ..resilience import ResiliencePolicy, is_retryable
 from . import metrics
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable, Iterable
+
     from purgatory.domain.model import Context
+    from refresh_engine import MetricsSink
+    from tenacity import AsyncRetrying
 
 logger = logging.getLogger("mcp_capability_router")
 
@@ -59,24 +62,56 @@ def _health(context: Context) -> HealthState:
     return HealthState.DEGRADED if context.failure_count else HealthState.HEALTHY
 
 
+def _may_retry(policy: ResiliencePolicy, context: OperationContext) -> bool:
+    """Whether the operation may be attempted more than once."""
+    if context.operation is not Operation.CALL_TOOL or policy.retry_unsafe_tools:
+        return True
+    return isinstance(context.capability, Tool) and context.capability.idempotent
+
+
+@dataclass(slots=True)
+class _ServerState:
+    """The resilience state of one server, derived from its policy."""
+
+    policy: ResiliencePolicy
+    breakers: AsyncCircuitBreakerFactory
+    retry: AsyncRetrying | None
+    semaphore: asyncio.Semaphore | None
+    operations: set[Operation] = field(default_factory=set)
+
+    @classmethod
+    def create(cls, policy: ResiliencePolicy) -> _ServerState:
+        return cls(
+            policy=policy,
+            breakers=(
+                policy.circuit_breaker
+                if policy.circuit_breaker is not None
+                else AsyncCircuitBreakerFactory()
+            ),
+            retry=policy.retry.copy(reraise=True) if policy.retry is not None else None,
+            semaphore=(
+                asyncio.Semaphore(policy.max_concurrency)
+                if policy.max_concurrency is not None
+                else None
+            ),
+        )
+
+
 class OperationPipeline:
     """Runs server operations through every resilience stage.
 
-    The stages wrap each other in this order, outermost first: the semaphore of
-    `max_concurrency`, the interceptors, the circuit breaker of the server and
-    operation, the retry policy, and, for every attempt, the rate limiter and the
-    timeout. Every operation also records metrics.
+    The stages wrap each other in this order, outermost first: the concurrency
+    limit of the server, the runtime-wide concurrency limit, the interceptors, the
+    circuit breaker of the server and operation, the retry policy, and, for every
+    attempt, the rate limiter and the timeout. Every operation also records metrics.
     """
 
     def __init__(
         self,
         *,
         max_concurrency: int,
-        operation_timeout: float | None,
-        retry: AsyncRetrying | None,
-        rate_limiter: AsyncLimiter | None,
-        circuit_breaker: AsyncCircuitBreakerFactory | None,
-        interceptors: Sequence[Interceptor],
+        policy: ResiliencePolicy,
+        interceptors: Iterable[InterceptorLike],
         metrics_sink: MetricsSink | None,
     ) -> None:
         """Validate and store the configuration."""
@@ -87,76 +122,83 @@ class OperationPipeline:
         ):
             msg = f"max_concurrency must be a positive integer, got {max_concurrency!r}"
             raise ConfigurationError(msg)
-        if operation_timeout is not None and not operation_timeout > 0:
-            msg = f"operation_timeout must be positive, got {operation_timeout!r}"
+        if not isinstance(policy, ResiliencePolicy):
+            msg = f"resilience must be a ResiliencePolicy, got {type(policy).__name__}"
             raise ConfigurationError(msg)
-        if retry is not None and not isinstance(retry, AsyncRetrying):
-            msg = f"retry must be a tenacity.AsyncRetrying, got {type(retry).__name__}"
-            raise ConfigurationError(msg)
-        if rate_limiter is not None and not isinstance(rate_limiter, AsyncLimiter):
-            msg = (
-                "rate_limiter must be an aiolimiter.AsyncLimiter, got "
-                f"{type(rate_limiter).__name__}"
-            )
-            raise ConfigurationError(msg)
-        if circuit_breaker is not None and not isinstance(
-            circuit_breaker, AsyncCircuitBreakerFactory
-        ):
-            msg = (
-                "circuit_breaker must be a purgatory.AsyncCircuitBreakerFactory, got "
-                f"{type(circuit_breaker).__name__}"
-            )
-            raise ConfigurationError(msg)
-        interceptors = tuple(interceptors)
-        for interceptor in interceptors:
-            if not isinstance(interceptor, Interceptor):
-                msg = f"interceptor {interceptor!r} is not callable"
+        chain = tuple(interceptors)
+        for interceptor in chain:
+            if not isinstance(interceptor, Interceptor) and not inspect.iscoroutinefunction(
+                interceptor
+            ):
+                msg = f"interceptor {interceptor!r} is neither an Interceptor nor an async function"
                 raise ConfigurationError(msg)
         self._semaphore = asyncio.Semaphore(max_concurrency)
-        self._timeout = operation_timeout
-        self._retry = retry.copy(reraise=True) if retry is not None else None
-        self._rate_limiter = rate_limiter
-        self._shared_breakers = circuit_breaker
-        self._breakers: dict[str, AsyncCircuitBreakerFactory] = {}
-        self._operations: dict[str, set[Operation]] = {}
-        self._interceptors: tuple[Interceptor, ...] = interceptors
+        self._policy = policy
+        self._interceptors: tuple[InterceptorLike, ...] = chain
         self._metrics = metrics_sink
+        self._servers: dict[str, _ServerState] = {}
+        self._listeners: dict[AsyncCircuitBreakerFactory, int] = {}
+        self._initialized: set[AsyncCircuitBreakerFactory] = set()
+        self._initializing = asyncio.Lock()
+        self._pending: set[asyncio.Task[None]] = set()
         self._closed = False
-        if circuit_breaker is not None:
-            circuit_breaker.add_listener(self._on_circuit_event)
 
-    def add_server(self, server_id: str) -> None:
-        """Start tracking the circuits and health of a server."""
-        if self._shared_breakers is None:
-            factory = AsyncCircuitBreakerFactory()
-            factory.add_listener(self._on_circuit_event)
-            self._breakers[server_id] = factory
-        self._operations[server_id] = set()
+    @property
+    def policy(self) -> ResiliencePolicy:
+        """The policy of servers registered without their own."""
+        return self._policy
+
+    def add_server(self, server_id: str, policy: ResiliencePolicy | None) -> None:
+        """Start tracking the circuits and health of a server.
+
+        Raises:
+            ConfigurationError: If `policy` is not a `ResiliencePolicy`.
+        """
+        if policy is not None and not isinstance(policy, ResiliencePolicy):
+            msg = f"resilience must be a ResiliencePolicy, got {type(policy).__name__}"
+            raise ConfigurationError(msg)
+        state = _ServerState.create(policy if policy is not None else self._policy)
+        count = self._listeners.get(state.breakers, 0)
+        if not count:
+            state.breakers.add_listener(self._on_circuit_event)
+        self._listeners[state.breakers] = count + 1
+        self._servers[server_id] = state
 
     def remove_server(self, server_id: str) -> None:
         """Forget the circuits and health of a server."""
-        self._breakers.pop(server_id, None)
-        self._operations.pop(server_id, None)
+        state = self._servers.pop(server_id, None)
+        if state is None:
+            return
+        count = self._listeners[state.breakers] - 1
+        if count:
+            self._listeners[state.breakers] = count
+        else:
+            del self._listeners[state.breakers]
+            self._initialized.discard(state.breakers)
+            state.breakers.remove_listener(self._on_circuit_event)
 
-    def close(self) -> None:
-        """Detach from a shared circuit breaker factory and forget every server."""
+    async def aclose(self) -> None:
+        """Detach from every circuit breaker factory and flush pending metrics."""
         if self._closed:
             return
         self._closed = True
-        if self._shared_breakers is not None:
-            self._shared_breakers.remove_listener(self._on_circuit_event)
-        self._breakers.clear()
-        self._operations.clear()
+        for server_id in list(self._servers):
+            self.remove_server(server_id)
+        while self._pending:
+            await asyncio.gather(*self._pending, return_exceptions=True)
 
-    async def run[T](
-        self, context: OperationContext, action: Callable[[], Awaitable[T]]
-    ) -> T:
+    async def run[T](self, context: OperationContext, action: Callable[[], Awaitable[T]]) -> T:
         """Run `action` for `context` through every stage of the pipeline."""
+        state = self._servers.get(context.server_id)
+        if state is None:
+            # The server was removed while the operation was queued.
+            state = _ServerState.create(self._policy)
         started = time.perf_counter()
         outcome = "failure"
         try:
-            async with self._semaphore:
-                result = await self._intercept(context, action)
+            limit = state.semaphore if state.semaphore is not None else contextlib.nullcontext()
+            async with limit, self._semaphore:
+                result = await self._intercept(state, context, action)
         except CircuitOpenError:
             outcome = "rejected"
             raise
@@ -172,8 +214,8 @@ class OperationPipeline:
                 "operation": str(context.operation),
                 "outcome": outcome,
             }
-            metrics.increment(self._metrics, metrics.OPERATIONS, 1, attributes)
-            metrics.observe(
+            await metrics.increment(self._metrics, metrics.OPERATIONS, 1, attributes)
+            await metrics.observe(
                 self._metrics,
                 metrics.OPERATION_DURATION,
                 time.perf_counter() - started,
@@ -182,48 +224,51 @@ class OperationPipeline:
 
     async def health(self, server_id: str) -> HealthState:
         """Return the worst health among the circuits of a server."""
+        state = self._servers.get(server_id)
+        if state is None:
+            return HealthState.HEALTHY
         worst = HealthState.HEALTHY
-        for operation in sorted(self._operations.get(server_id, ())):
-            breaker = await self._breaker(server_id, operation)
-            state = _health(breaker.context)
-            if _SEVERITY.index(state) > _SEVERITY.index(worst):
-                worst = state
+        for operation in sorted(state.operations):
+            breaker = await self._breaker(state, server_id, operation)
+            health = _health(breaker.context)
+            if _SEVERITY.index(health) > _SEVERITY.index(worst):
+                worst = health
         return worst
 
     async def _intercept[T](
-        self, context: OperationContext, action: Callable[[], Awaitable[T]]
+        self,
+        state: _ServerState,
+        context: OperationContext,
+        action: Callable[[], Awaitable[T]],
     ) -> T:
-        call: Callable[[], Awaitable[Any]] = functools.partial(
-            self._guard, context, action
-        )
+        call: Callable[[], Awaitable[Any]] = functools.partial(self._guard, state, context, action)
         for interceptor in reversed(self._interceptors):
             call = functools.partial(interceptor, context, call)
         return await call()
 
     async def _guard[T](
-        self, context: OperationContext, action: Callable[[], Awaitable[T]]
+        self,
+        state: _ServerState,
+        context: OperationContext,
+        action: Callable[[], Awaitable[T]],
     ) -> T:
-        operations = self._operations.get(context.server_id)
-        if operations is not None:
-            operations.add(context.operation)
-        breaker = await self._breaker(context.server_id, context.operation)
+        state.operations.add(context.operation)
+        breaker = await self._breaker(state, context.server_id, context.operation)
         try:
             async with breaker:
-                return await self._attempts(context, action)
+                return await self._attempts(state, context, action)
         except OpenedState as error:
-            msg = (
-                f"the circuit of {context.operation} on server "
-                f"{context.server_id!r} is open"
-            )
+            msg = f"the circuit of {context.operation} on server {context.server_id!r} is open"
             raise CircuitOpenError(msg) from error
 
-    async def _breaker(self, server_id: str, operation: Operation):
-        factory = self._shared_breakers
-        if factory is None:
-            factory = self._breakers.get(server_id)
-        if factory is None:
-            # The server was removed while the operation was in flight.
-            factory = AsyncCircuitBreakerFactory()
+    async def _breaker(self, state: _ServerState, server_id: str, operation: Operation):
+        factory = state.breakers
+        if factory not in self._initialized:
+            async with self._initializing:
+                if factory not in self._initialized:
+                    # Connects a shared store, such as purgatory's Redis unit of work.
+                    await factory.initialize()
+                    self._initialized.add(factory)
         breaker = await factory.get_breaker(f"{server_id}:{operation}")
         # purgatory stops at the first matching exclusion; the factory's own
         # exclusions take precedence over the router's classification.
@@ -231,34 +276,37 @@ class OperationPipeline:
         return breaker
 
     async def _attempts[T](
-        self, context: OperationContext, action: Callable[[], Awaitable[T]]
+        self,
+        state: _ServerState,
+        context: OperationContext,
+        action: Callable[[], Awaitable[T]],
     ) -> T:
-        if self._retry is None:
-            return await self._attempt(context, action)
-        retrying = self._retry.copy()
+        if state.retry is None or not _may_retry(state.policy, context):
+            return await self._attempt(state.policy, context, action)
+        retrying = state.retry.copy()
         try:
-            return await retrying(self._attempt, context, action)
+            return await retrying(self._attempt, state.policy, context, action)
         finally:
             retries = int(retrying.statistics.get("attempt_number", 1)) - 1
             if retries > 0:
-                metrics.increment(
+                await metrics.increment(
                     self._metrics,
                     metrics.RETRIES,
                     retries,
-                    {
-                        "server_id": context.server_id,
-                        "operation": str(context.operation),
-                    },
+                    {"server_id": context.server_id, "operation": str(context.operation)},
                 )
 
     async def _attempt[T](
-        self, context: OperationContext, action: Callable[[], Awaitable[T]]
+        self,
+        policy: ResiliencePolicy,
+        context: OperationContext,
+        action: Callable[[], Awaitable[T]],
     ) -> T:
-        if self._rate_limiter is not None:
-            await self._rate_limiter.acquire()
-        if self._timeout is None:
+        if policy.rate_limiter is not None:
+            await policy.rate_limiter.acquire()
+        if policy.operation_timeout is None:
             return await action()
-        deadline = asyncio.timeout(self._timeout)
+        deadline = asyncio.timeout(policy.operation_timeout)
         try:
             async with deadline:
                 return await action()
@@ -266,7 +314,7 @@ class OperationPipeline:
             if deadline.expired():
                 error.add_note(
                     f"{context.operation} on server {context.server_id!r} exceeded "
-                    f"the operation timeout of {self._timeout}s"
+                    f"the operation timeout of {policy.operation_timeout}s"
                 )
             raise
 
@@ -274,15 +322,25 @@ class OperationPipeline:
         if kind != "state_changed":
             return
         server_id, _, operation = name.partition(":")
+        if server_id not in self._servers:
+            return
         raw_state = str(getattr(event, "state", ""))
         state = _STATE_NAMES.get(raw_state, raw_state)
         if state == "open":
             logger.warning("Circuit opened for %s on server %r", operation, server_id)
         else:
             logger.info("Circuit %s for %s on server %r", state, operation, server_id)
-        metrics.increment(
-            self._metrics,
-            metrics.CIRCUIT_TRANSITIONS,
-            1,
-            {"server_id": server_id, "operation": operation, "state": state},
+        if self._metrics is None:
+            return
+        # purgatory calls listeners synchronously; the sink is awaited in a task that
+        # `aclose` waits for.
+        task = asyncio.get_running_loop().create_task(
+            metrics.increment(
+                self._metrics,
+                metrics.CIRCUIT_TRANSITIONS,
+                1,
+                {"server_id": server_id, "operation": operation, "state": state},
+            )
         )
+        self._pending.add(task)
+        task.add_done_callback(self._pending.discard)

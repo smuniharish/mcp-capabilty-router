@@ -36,9 +36,7 @@ async def main(model: BaseChatModel) -> None:
             middleware=[CapabilityRoutingMiddleware(runtime, limit=3)],
             system_prompt="You are a support assistant. Use the tools to answer.",
         )
-        result = await agent.ainvoke(
-            {"messages": [{"role": "user", "content": QUESTION}]}
-        )
+        result = await agent.ainvoke({"messages": [{"role": "user", "content": QUESTION}]})
         for message in result["messages"]:
             if isinstance(message, ToolMessage):
                 print(f"called {message.name}: {message.status}")

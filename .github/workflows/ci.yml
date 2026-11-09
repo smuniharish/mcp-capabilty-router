@@ -27,10 +27,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           python-version: "3.12"
-      - run: uv sync
+      - run: uv sync --all-extras --all-groups
       - run: uv run ruff format --check .
       - run: uv run ruff check --output-format=github .
       - run: uv run pyrefly check
@@ -49,16 +49,17 @@ jobs:
           - "3.12"
           - "3.13"
           - "3.14"
+          - "3.15"
     env:
       HYPOTHESIS_PROFILE: ci
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           python-version: ${{ matrix.python-version }}
-      - run: uv sync --no-default-groups --group test --group examples
+      - run: uv sync --no-default-groups --group test --group examples --all-extras
       - run: uv run --no-sync pytest --cov
 
   examples:
@@ -66,6 +67,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
       postgres:
         image: postgres:18
         env:
@@ -80,34 +90,37 @@ jobs:
     env:
       MCP_ROUTER_EXAMPLE_POSTGRES_DSN: postgresql://postgres:postgres@localhost:5432/postgres
       MCP_ROUTER_EXAMPLE_NODE: "1"
+      MCP_ROUTER_EXAMPLE_REDIS_URL: redis://localhost:6379/0
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           python-version: "3.12"
-      - run: uv sync
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+      - run: uv sync --all-extras --group examples
       - run: uv run python scripts/run_examples.py
 
   docs:
     name: Documentation and Agent Skill
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      NO_MKDOCS_2_WARNING: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           python-version: "3.12"
-      - run: uv sync
+      - run: uv sync --all-extras --group docs --group examples
       - run: uv run python scripts/check_docs.py
       - run: uv run python scripts/render_diagrams.py --check
-      - run: uv run mkdocs build --strict
-      - run: uvx --from skills-ref==0.1.1 agentskills validate mcp-capability-router-skills/skills/mcp-capability-router
+      - run: uv run zensical build --strict
+      - run: uv run python scripts/check_site_links.py
+      - run: uv run pytest tests/skill
 
   distribution:
     name: Distribution
@@ -117,13 +130,29 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           python-version: "3.12"
-      - run: uv sync
+      - run: uv sync --group package
       - run: uv build
       - run: uv run twine check --strict dist/*
-      - run: uv run python scripts/validate_distribution.py dist --python 3.12 --python 3.14
+      - run: uv run python scripts/validate_distribution.py dist --python 3.12 --python 3.15
+
+  lowest:
+    name: Lowest supported direct dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      UV_LOCKED: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.12"
+      - run: uv sync --resolution lowest-direct --all-extras --group examples
+      - run: uv run --no-sync pytest
 
   success:
     name: CI success
@@ -134,6 +163,7 @@ jobs:
       - examples
       - docs
       - distribution
+      - lowest
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

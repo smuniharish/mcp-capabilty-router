@@ -30,9 +30,7 @@ from langchain.embeddings import init_embeddings
 
 from mcp_capability_router import EmbeddingRetriever, MCPRuntime
 
-runtime = MCPRuntime(
-    retriever=EmbeddingRetriever(init_embeddings("openai:text-embedding-3-small"))
-)
+runtime = MCPRuntime(retriever=EmbeddingRetriever(init_embeddings("openai:text-embedding-3-small")))
 ```
 
 ## How KeywordRetriever ranks

@@ -1,0 +1,17 @@
+name: Bug report
+description: Report a reproducible problem.
+body:
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Minimal runnable code, expected behavior, and actual behavior. Remove credentials.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Package version, Python version, operating system, and relevant dependencies.
+    validations:
+      required: true

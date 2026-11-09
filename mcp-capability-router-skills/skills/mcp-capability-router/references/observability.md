@@ -2,11 +2,11 @@
 
 ## Metrics
 
-Pass any refresh-engine `MetricsSink`, an object with
+Pass a refresh-engine `MetricsSink` subclass with async
 `increment(name, value=1, attributes=None, /)` and
 `observe(name, value, attributes=None, /)`, as `MCPRuntime(metrics=...)`.
 `refresh_engine.InMemoryMetrics` works for tests; bridge to Prometheus or
-OpenTelemetry with a small sink class.
+OpenTelemetry with `refresh_engine.otel.OpenTelemetryMetricsSink`.
 
 | Metric | Kind | Attributes |
 | --- | --- | --- |
@@ -54,4 +54,6 @@ states = {server: str(await runtime.health(server)) for server in runtime.server
 ## Tracing
 
 LangChain tracing records routed tool calls like any tool call. Trace server
-operations with an interceptor that opens a span around `await call_next()`.
+operations with `mcp_capability_router.otel.OpenTelemetryInterceptor`, supplied with
+an application-owned tracer. Install the `otel` extra. Arguments and results are
+not recorded. Configure and shut down providers in the application.

@@ -21,18 +21,20 @@ from tenacity import (
     wait_exponential_jitter,
 )
 
-from mcp_capability_router import MCPRuntime, is_retryable
+from mcp_capability_router import MCPRuntime, ResiliencePolicy, is_retryable
 
 runtime = MCPRuntime(
     max_concurrency=32,
-    operation_timeout=30,
-    retry=AsyncRetrying(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential_jitter(initial=0.2, max=5),
-        retry=retry_if_exception(is_retryable),
+    resilience=ResiliencePolicy(
+        operation_timeout=30,
+        retry=AsyncRetrying(
+            stop=stop_after_attempt(3),
+            wait=wait_exponential_jitter(multiplier=0.2, max=5),
+            retry=retry_if_exception(is_retryable),
+        ),
+        rate_limiter=AsyncLimiter(100, time_period=1),
+        circuit_breaker=AsyncCircuitBreakerFactory(default_threshold=5, default_ttl=30),
     ),
-    rate_limiter=AsyncLimiter(100, time_period=1),
-    circuit_breaker=AsyncCircuitBreakerFactory(default_threshold=5, default_ttl=30),
 )
 ```
 
@@ -40,7 +42,7 @@ runtime = MCPRuntime(
   last error, never a tenacity `RetryError`.
 - Without `circuit_breaker`, each server gets in-memory circuits (5 failures, 30
   seconds), discarded on unregister. A shared factory, for example with
-  `AsyncRedisUnitOfWork(url)` from `purgatory[redis]` and `await factory.initialize()`,
+  `AsyncRedisUnitOfWork(url)` from the router's `redis` extra,
   shares circuit state between runtimes that register the same servers under the same
   IDs. Its `exclude` list is checked before the router's classification.
 - A timeout raises the built-in `TimeoutError` with a note naming the operation and
@@ -69,9 +71,7 @@ returns whether to retry. A `RefreshError` is categorized by its cause.
 ## Interceptors
 
 ```python
-async def audit(
-    context: OperationContext, call_next: Callable[[], Awaitable[Any]]
-) -> Any:
+async def audit(context: OperationContext, call_next: Callable[[], Awaitable[Any]]) -> Any:
     try:
         return await call_next()
     finally:
@@ -80,7 +80,9 @@ async def audit(
 
 Interceptors must return `await call_next()` or raise. Raise `AuthorizationError` to
 reject an operation without retries or circuit impact. Use one `AsyncLimiter` per
-server inside an interceptor to rate-limit servers separately.
+server policy to rate-limit each attempt separately. A per-server policy replaces
+the default; use `dataclasses.replace` to preserve other fields. Tool retries
+require read-only or idempotent hints unless `retry_unsafe_tools=True` is explicit.
 
 ## Health
 

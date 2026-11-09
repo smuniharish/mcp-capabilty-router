@@ -54,13 +54,9 @@ from fastmcp.client.transports import StreamableHttpTransport
 await runtime.register_mcp("crm", Client("https://crm.example.com/mcp", auth=crm_token))
 await runtime.register_mcp(
     "billing",
-    StreamableHttpTransport(
-        "https://billing.example.com/mcp", headers={"X-Tenant": tenant_id}
-    ),
+    StreamableHttpTransport("https://billing.example.com/mcp", headers={"X-Tenant": tenant_id}),
 )
-await runtime.register_mcp(
-    "calendar", Client("https://cal.example.com/mcp", auth="oauth")
-)
+await runtime.register_mcp("calendar", Client("https://cal.example.com/mcp", auth="oauth"))
 ```
 
 To add credentials to every operation, such as a short-lived token from a secret
@@ -114,7 +110,7 @@ from mcp import types
 from mcp_capability_router import MCPAdapter
 
 
-class CatalogAdapter:
+class CatalogAdapter(MCPAdapter):
     """Exposes an internal service as MCP capabilities."""
 
     def __init__(self, base_url: str) -> None:
@@ -154,9 +150,7 @@ class CatalogAdapter:
 
 
 assert isinstance(CatalogAdapter("https://catalog.internal"), MCPAdapter)
-await runtime.register_server(
-    "catalog", lambda: CatalogAdapter("https://catalog.internal")
-)
+await runtime.register_server("catalog", lambda: CatalogAdapter("https://catalog.internal"))
 ```
 
 Raise the router's [exceptions](../api/errors.md), such as `ServerConnectionError`

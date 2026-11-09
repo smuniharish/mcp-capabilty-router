@@ -69,9 +69,7 @@ class TestModels:
 
     def test_subclasses_set_their_type(self) -> None:
         tool = Tool(capability_id="s:tool:t", server_id="s", name="t")
-        resource = Resource(
-            capability_id="s:resource:u", server_id="s", name="u", uri="u"
-        )
+        resource = Resource(capability_id="s:resource:u", server_id="s", name="u", uri="u")
         prompt = Prompt(capability_id="s:prompt:p", server_id="s", name="p")
         assert (tool.type, resource.type, prompt.type) == (
             CapabilityType.TOOL,
@@ -97,9 +95,7 @@ class TestModels:
 
     def test_prompt_arguments_describe_requirements(self) -> None:
         argument = PromptArgument(name="topic", description="What", required=True)
-        prompt = Prompt(
-            capability_id="s:prompt:p", server_id="s", name="p", arguments=(argument,)
-        )
+        prompt = Prompt(capability_id="s:prompt:p", server_id="s", name="p", arguments=(argument,))
         assert prompt.arguments[0].required is True
 
 
@@ -229,9 +225,7 @@ class TestNaming:
 
     def test_qualified_names_round_trip_and_report_ambiguity(self) -> None:
         assert qualified_tool_name("fs", "read_file") == "fs_read_file"
-        assert split_qualified_tool_name("fs_read_file", ["fs", "git"]) == [
-            ("fs", "read_file")
-        ]
+        assert split_qualified_tool_name("fs_read_file", ["fs", "git"]) == [("fs", "read_file")]
         assert split_qualified_tool_name("a_b_x", ["a", "a_b"]) == [
             ("a", "b_x"),
             ("a_b", "x"),

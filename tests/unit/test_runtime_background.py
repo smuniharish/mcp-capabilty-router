@@ -2,16 +2,26 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING
 
-import pytest
-from refresh_engine import EventKind, InMemoryMetrics, RefreshEvent, TriggerSource
+from refresh_engine import (
+    EventHandler,
+    EventKind,
+    InMemoryMetrics,
+    RefreshEvent,
+    TriggerSource,
+)
 
 from mcp_capability_router import MCPRuntime, RefreshPolicy, ServerConnectionError
 from tests.support import FakeAdapter, mcp_tool
 
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
-class Completions:
+    import pytest
+
+
+class Completions(EventHandler):
     """Counts completed refreshes and wakes up waiters."""
 
     def __init__(self) -> None:
@@ -36,9 +46,7 @@ async def test_interval_refreshes_until_close() -> None:
     await runtime.register_server(
         "s",
         lambda: adapter,
-        refresh=RefreshPolicy(
-            on_register=True, interval=0.02, event_handlers=(completions,)
-        ),
+        refresh=RefreshPolicy(on_register=True, interval=0.02, event_handlers=(completions,)),
     )
     adapter.tools.append(mcp_tool("second"))
     await completions.wait_for(2)
@@ -76,9 +84,7 @@ async def test_async_iterable_events_trigger_refreshes() -> None:
         await runtime.register_server(
             "s",
             lambda: adapter,
-            refresh=RefreshPolicy(
-                change_events=changes(), event_handlers=(completions,)
-            ),
+            refresh=RefreshPolicy(change_events=changes(), event_handlers=(completions,)),
         )
         await completions.wait_for(2)
         assert adapter.calls.count(("list_tools", None)) == 2
@@ -124,9 +130,7 @@ async def test_failed_background_refreshes_are_logged(
     events: asyncio.Queue[str] = asyncio.Queue()
     with caplog.at_level(logging.WARNING, logger="mcp_capability_router"):
         async with MCPRuntime() as runtime:
-            await runtime.register_server(
-                "s", broken, refresh=RefreshPolicy(change_events=events)
-            )
+            await runtime.register_server("s", broken, refresh=RefreshPolicy(change_events=events))
             events.put_nowait("changed")
             async with asyncio.timeout(5):
                 await events.join()
@@ -141,39 +145,49 @@ async def test_failed_background_refreshes_are_logged(
     assert "unexpected" in caplog.text
 
 
+class Recorder(EventHandler):
+    """Records every event it receives."""
+
+    def __init__(self) -> None:
+        self.events: list[RefreshEvent] = []
+
+    async def __call__(self, event: RefreshEvent) -> None:
+        self.events.append(event)
+
+
 async def test_event_handlers_and_metrics_observe_refreshes() -> None:
     received: list[RefreshEvent] = []
+
+    async def record(event: RefreshEvent) -> None:
+        received.append(event)
+
     metrics = InMemoryMetrics()
     async with MCPRuntime(metrics=metrics) as runtime:
         await runtime.register_server(
             "s",
             lambda: FakeAdapter(tools=[mcp_tool("first")]),
-            refresh=RefreshPolicy(on_register=True, event_handlers=(received.append,)),
+            refresh=RefreshPolicy(on_register=True, event_handlers=(record,)),
         )
     assert EventKind.REFRESH_COMPLETED in {event.kind for event in received}
     counters, _ = metrics.snapshot()
     assert (
         counters[
-            "refresh_engine.refreshes{mode=incremental,server_id=s,status=success,"
-            "trigger=manual}"
+            "refresh_engine.refreshes{mode=incremental,server_id=s,status=success,trigger=manual}"
         ]
         == 1
     )
     assert (
-        counters[
-            "mcp_capability_router.operations"
-            "{operation=discover,outcome=success,server_id=s}"
-        ]
+        counters["mcp_capability_router.operations{operation=discover,outcome=success,server_id=s}"]
         == 1
     )
 
 
 async def test_event_handlers_work_without_metrics() -> None:
-    received: list[RefreshEvent] = []
+    recorder = Recorder()
     async with MCPRuntime() as runtime:
         await runtime.register_server(
             "s",
             FakeAdapter,
-            refresh=RefreshPolicy(on_register=True, event_handlers=(received.append,)),
+            refresh=RefreshPolicy(on_register=True, event_handlers=(recorder,)),
         )
-    assert EventKind.REFRESH_COMPLETED in {event.kind for event in received}
+    assert EventKind.REFRESH_COMPLETED in {event.kind for event in recorder.events}

@@ -89,9 +89,7 @@ def list_alerts(region: str) -> list[str]:
 
 async def main() -> None:
     async with MCPRuntime() as runtime:
-        await runtime.register_mcp(
-            "weather", weather, refresh=RefreshPolicy(on_register=True)
-        )
+        await runtime.register_mcp("weather", weather, refresh=RefreshPolicy(on_register=True))
         [tool] = await runtime.retrieve("What is the forecast for Paris?", limit=1)
         print(tool.capability_id)
 

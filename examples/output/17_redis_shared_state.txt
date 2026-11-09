@@ -1,0 +1,12 @@
+a read-only result is cached once for every process:
+  first calls the server: search_customers
+  -> Acme Corp
+  -> Acme Corp
+
+a failing server opens the circuit for every process:
+  first calls the server: update_customer_email
+  ServerUnavailableError: crm is down
+  first calls the server: update_customer_email
+  ServerUnavailableError: crm is down
+  CircuitOpenError: the circuit of call_tool on server 'crm' is open
+health in the second process: unhealthy

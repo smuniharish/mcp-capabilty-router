@@ -1,14 +1,17 @@
 """Retries, circuit breaking, timeouts, interceptors, and health.
 
 A custom adapter wraps the FastMCP adapter to simulate an unreliable server.
-The runtime retries transient failures, opens the circuit of a server that keeps
-failing, enforces a timeout per attempt, and reports health from the circuits.
+The runtime-wide `ResiliencePolicy` retries transient failures of idempotent
+tools, opens the circuit of a server that keeps failing, and rate-limits every
+attempt; the slow `reports` server gets its own policy with a short timeout.
+Health is reported from the circuits, and unhealthy servers drop out of retrieval.
 """
 
 import asyncio
+import dataclasses
 import logging
 import sys
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Mapping
 from typing import Any
 
 from aiolimiter import AsyncLimiter
@@ -18,11 +21,14 @@ from purgatory import AsyncCircuitBreakerFactory
 from tenacity import AsyncRetrying, retry_if_exception, stop_after_attempt, wait_none
 
 from mcp_capability_router import (
+    CallNext,
     CircuitOpenError,
     FastMCPAdapter,
+    Interceptor,
     MCPRuntime,
     OperationContext,
     RefreshPolicy,
+    ResiliencePolicy,
     ServerUnavailableError,
     ToolExecutionError,
     is_retryable,
@@ -44,24 +50,23 @@ class UnreliableAdapter(FastMCPAdapter):
         return await super().call_tool(name, arguments)
 
 
-async def audit(
-    context: OperationContext, call_next: Callable[[], Awaitable[Any]]
-) -> Any:
-    operation = f"{context.operation} on {context.server_id}"
-    try:
-        result = await call_next()
-    except Exception as error:
-        print(f"  audit: {operation} -> {type(error).__name__}")
-        raise
-    print(f"  audit: {operation} -> ok")
-    return result
+class Audit(Interceptor):
+    """Prints the outcome of every tool call; interceptors may also be async functions."""
+
+    async def __call__(self, context: OperationContext, call_next: CallNext, /) -> Any:
+        operation = f"{context.operation} on {context.server_id}"
+        try:
+            result = await call_next()
+        except Exception as error:
+            print(f"  audit: {operation} -> {type(error).__name__}")
+            raise
+        print(f"  audit: {operation} -> ok")
+        return result
 
 
 async def main() -> None:
     # The runtime logs circuit transitions to the "mcp_capability_router" logger.
-    logging.basicConfig(
-        level=logging.WARNING, format="  log: %(message)s", stream=sys.stdout
-    )
+    logging.basicConfig(level=logging.WARNING, format="  log: %(message)s", stream=sys.stdout)
     flaky = UnreliableAdapter(crm_server(), failures=2)
     down = UnreliableAdapter(crm_server(), failures=1_000)
 
@@ -73,26 +78,31 @@ async def main() -> None:
         await asyncio.sleep(5)
         return "done"
 
-    async with MCPRuntime(
+    resilience = ResiliencePolicy(
+        # Only tools marked readOnlyHint or idempotentHint are retried, unless
+        # retry_unsafe_tools is set: retrying any other call could repeat its effects.
         retry=AsyncRetrying(
             stop=stop_after_attempt(3),
             wait=wait_none(),
             retry=retry_if_exception(is_retryable),
         ),
         circuit_breaker=AsyncCircuitBreakerFactory(default_threshold=2, default_ttl=60),
-        operation_timeout=0.2,
         rate_limiter=AsyncLimiter(100, time_period=1),
-        interceptors=[audit],
-    ) as runtime:
+        operation_timeout=10,
+    )
+    async with MCPRuntime(resilience=resilience, interceptors=[Audit()]) as runtime:
         policy = RefreshPolicy(on_register=True)
         await runtime.register_server("flaky", lambda: flaky, refresh=policy)
         await runtime.register_server("down", lambda: down, refresh=policy)
-        await runtime.register_mcp("reports", slow, refresh=policy)
+        await runtime.register_mcp(
+            "reports",
+            slow,
+            refresh=policy,
+            resilience=dataclasses.replace(runtime.resilience, operation_timeout=0.2),
+        )
 
         print("transient failures are retried:")
-        result = await runtime.execute(
-            "flaky:tool:search_customers", {"query": "globex"}
-        )
+        result = await runtime.execute("flaky:tool:search_customers", {"query": "globex"})
         print(f"  found {result.artifact['structured_content']['result'][0]['name']}")
 
         print("\nrepeated failures open the circuit:")
@@ -119,6 +129,10 @@ async def main() -> None:
 
         for server_id in runtime.servers:
             print(f"health of {server_id}: {await runtime.health(server_id)}")
+
+        print("\nservers with an open circuit drop out of retrieval:")
+        found = await runtime.retrieve("search customers")
+        print(f"  {sorted({capability.server_id for capability in found})}")
 
 
 if __name__ == "__main__":

@@ -17,7 +17,7 @@ async def main() -> None:
     changes: asyncio.Queue[str] = asyncio.Queue()
     refreshed = asyncio.Event()
 
-    def on_event(event: RefreshEvent) -> None:
+    async def on_event(event: RefreshEvent) -> None:
         if event.kind is EventKind.REFRESH_COMPLETED:
             refreshed.set()
 
@@ -43,9 +43,7 @@ async def main() -> None:
         [merge] = await runtime.retrieve("merge two customers", limit=1)
         print(f"change event discovered: {merge.capability_id}")
 
-        result = await runtime.refresh_server(
-            "crm", selector=TagSelector("tool", key="type")
-        )
+        result = await runtime.refresh_server("crm", selector=TagSelector("tool", key="type"))
         print(
             f"tools only: status={result.status} mode={result.request.mode} "
             f"refreshed={result.refreshed_count}"

@@ -39,9 +39,7 @@ def capability_from_json(document: str) -> Capability:
     fields["tags"] = frozenset(fields["tags"])
     fields["depends_on"] = frozenset(fields["depends_on"])
     if kind is Prompt:
-        fields["arguments"] = tuple(
-            PromptArgument(**argument) for argument in fields["arguments"]
-        )
+        fields["arguments"] = tuple(PromptArgument(**argument) for argument in fields["arguments"])
     return kind(**fields)
 
 
@@ -87,9 +85,7 @@ def crm_server() -> FastMCP:
 
     @server.prompt(description="Draft a follow-up email to a customer")
     def follow_up(customer_name: str, topic: str) -> str:
-        return (
-            f"Write a short, friendly follow-up email to {customer_name} about {topic}."
-        )
+        return f"Write a short, friendly follow-up email to {customer_name} about {topic}."
 
     return server
 

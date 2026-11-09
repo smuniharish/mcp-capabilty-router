@@ -3,11 +3,13 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 import pytest
 from mcp import types
 from refresh_engine import (
     InMemoryMetrics,
+    MetricsSink,
     PlanAction,
     RefreshRequest,
     Resource,
@@ -15,6 +17,7 @@ from refresh_engine import (
 )
 
 from mcp_capability_router import (
+    Capability,
     ConfigurationError,
     DiscoveryError,
     InMemoryRegistry,
@@ -32,6 +35,9 @@ from mcp_capability_router._internal.servers import ServerHandle
 from mcp_capability_router._internal.sources import CapabilitySource, RegistryOperation
 from tests.support import FakeAdapter, mcp_prompt, mcp_resource, mcp_tool, tool
 
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
 
 class TestDiscovery:
     async def test_maps_tools_resources_and_prompts(self) -> None:
@@ -40,9 +46,7 @@ class TestDiscovery:
                 mcp_tool(
                     "read_file",
                     "Read a file",
-                    annotations=types.ToolAnnotations(
-                        title="Reader", read_only_hint=True
-                    ),
+                    annotations=types.ToolAnnotations(title="Reader", read_only_hint=True),
                     output_schema={"type": "object"},
                     meta={"fastmcp": {"tags": ["fs", "read"]}, "depends_on": ["x:y:z"]},
                 ),
@@ -68,9 +72,7 @@ class TestDiscovery:
                 )
             ],
         )
-        capabilities = {
-            c.capability_id: c for c in await discover_capabilities(adapter, "s")
-        }
+        capabilities = {c.capability_id: c for c in await discover_capabilities(adapter, "s")}
 
         reader = capabilities["s:tool:read_file"]
         assert isinstance(reader, Tool)
@@ -151,33 +153,33 @@ class TestGatherOrCancel:
 
 
 class TestMetrics:
-    def test_none_sink_is_ignored_and_failures_are_logged(
+    async def test_none_sink_is_ignored_and_failures_are_logged(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
-        increment(None, "x", 1, {})
-        observe(None, "x", 1.0, {})
+        await increment(None, "x", 1, {})
+        await observe(None, "x", 1.0, {})
 
-        class Broken:
-            def increment(self, *args: object) -> None:
+        class Broken(MetricsSink):
+            async def increment(self, *args: object) -> None:
                 raise RuntimeError("down")
 
-            def observe(self, *args: object) -> None:
+            async def observe(self, *args: object) -> None:
                 raise RuntimeError("down")
 
         with caplog.at_level(logging.ERROR, logger="mcp_capability_router"):
-            increment(Broken(), "x", 1, {})
-            observe(Broken(), "y", 1.0, {})
+            await increment(Broken(), "x", 1, {})
+            await observe(Broken(), "y", 1.0, {})
         assert [record.getMessage() for record in caplog.records] == [
             "Metrics sink failed to record x",
             "Metrics sink failed to record y",
         ]
 
-    def test_server_scoped_sink_adds_the_server(self) -> None:
+    async def test_server_scoped_sink_adds_the_server(self) -> None:
         sink = InMemoryMetrics()
         scoped = ServerScopedSink(sink, "fs")
-        scoped.increment("refreshes")
-        scoped.increment("refreshes", 2, {"status": "success"})
-        scoped.observe("duration", 0.5)
+        await scoped.increment("refreshes")
+        await scoped.increment("refreshes", 2, {"status": "success"})
+        await scoped.observe("duration", 0.5)
         counters, observations = sink.snapshot()
         assert counters == {
             "refreshes{server_id=fs}": 1,
@@ -231,28 +233,41 @@ class TestServerHandle:
         assert adapters[1].closes == 1
         assert await handle.adapter() is adapters[2]
 
+    async def test_awaits_async_factories(self) -> None:
+        adapter = FakeAdapter()
+
+        async def factory() -> FakeAdapter:
+            return adapter
+
+        handle = ServerHandle("s", factory)
+        assert await handle.adapter() is adapter
+        await handle.close()
+
     async def test_rejects_factories_that_return_no_adapter(self) -> None:
         handle = ServerHandle("s", lambda: object())  # type: ignore[arg-type,return-value]
-        with pytest.raises(ConfigurationError, match="does not implement MCPAdapter"):
+        with pytest.raises(ConfigurationError, match="does not subclass MCPAdapter"):
             await handle.adapter()
 
 
 class TestSources:
     async def test_discover_and_snapshot(self) -> None:
-        capabilities = [tool("s", "a", tags=frozenset({"x", "w"})), tool("s", "b")]
+        capabilities: list[Capability] = [
+            tool("s", "a", tags=frozenset({"x", "w"})),
+            tool("s", "b"),
+        ]
         capabilities.append(tool("s", "c", depends_on=frozenset({"s:tool:a"})))
-        pruned: list[frozenset[str]] = []
+        reconciled: list[list[Capability]] = []
 
-        async def discover() -> list:
+        async def discover() -> list[Capability]:
             return capabilities
 
-        async def prune(discovered: frozenset[str]) -> None:
-            pruned.append(discovered)
+        async def reconcile(discovered: Sequence[Capability]) -> None:
+            reconciled.append(list(discovered))
 
-        source = CapabilitySource(discover, prune)
+        source = CapabilitySource(discover, reconcile)
         result = await source.discover()
         await source.discover()
-        assert pruned == [frozenset({"s:tool:a", "s:tool:b", "s:tool:c"})]
+        assert reconciled == [capabilities]
         resources = list(result.resources)  # type: ignore[arg-type]
         assert [resource.resource_id for resource in resources] == [
             "s:tool:a",
@@ -268,31 +283,31 @@ class TestSources:
         assert source.take_error() is None
 
     async def test_remembers_the_last_discovery_error(self) -> None:
-        async def discover() -> list:
+        async def discover() -> list[Capability]:
             raise ValueError("down")
 
-        async def prune(discovered: frozenset[str]) -> None:
+        async def reconcile(discovered: Sequence[Capability]) -> None:
             raise AssertionError
 
-        source = CapabilitySource(discover, prune)
+        source = CapabilitySource(discover, reconcile)
         with pytest.raises(ValueError, match="down"):
             await source.discover()
         error = source.take_error()
         assert isinstance(error, ValueError)
         assert source.take_error() is None
 
-    async def test_retries_pruning_until_it_succeeds(self) -> None:
-        attempts: list[frozenset[str]] = []
+    async def test_retries_reconciliation_until_it_succeeds(self) -> None:
+        attempts: list[Sequence[Capability]] = []
 
-        async def discover() -> list:
+        async def discover() -> list[Capability]:
             return [tool("s", "a")]
 
-        async def prune(discovered: frozenset[str]) -> None:
+        async def reconcile(discovered: Sequence[Capability]) -> None:
             attempts.append(discovered)
             if len(attempts) == 1:
                 raise OSError("registry unavailable")
 
-        source = CapabilitySource(discover, prune)
+        source = CapabilitySource(discover, reconcile)
         with pytest.raises(OSError, match="registry unavailable"):
             await source.discover()
         assert isinstance(source.take_error(), OSError)

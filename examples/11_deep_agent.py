@@ -37,9 +37,7 @@ async def main(model: BaseChatModel) -> None:
                 "the company systems; use them to answer."
             ),
         )
-        result = await agent.ainvoke(
-            {"messages": [{"role": "user", "content": QUESTION}]}
-        )
+        result = await agent.ainvoke({"messages": [{"role": "user", "content": QUESTION}]})
         routed = [
             message.name
             for message in result["messages"]

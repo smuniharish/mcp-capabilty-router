@@ -7,7 +7,6 @@ translating once a client exists, so they are imported on first use.
 from __future__ import annotations
 
 import functools
-from collections.abc import Awaitable, Iterator
 from typing import TYPE_CHECKING
 
 from ..errors import (
@@ -26,6 +25,8 @@ from ..errors import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Iterator
+
     from mcp.shared.exceptions import MCPError
 
 

@@ -1,5 +1,8 @@
 # Examples
 
+The examples include durable refresh state, downstream storage injection, shared
+Redis resilience, and OpenTelemetry alongside the core routing workflows.
+
 These programs use only the public API. Find them, with instructions for running
 them, in the
 [`examples`](https://github.com/smuniharish/mcp-capabilty-router/tree/HEAD/examples)
@@ -248,3 +251,46 @@ examples/14_stdio_servers.py
     examples/output/15_scale.txt
     --8<--
     ```
+
+## OpenTelemetry
+
+Install the `otel` extra. By default the example inspects spans and metrics in
+memory. Set `OTEL_EXPORTER_OTLP_ENDPOINT` to export to an OTLP collector; configure
+TLS using the standard OpenTelemetry environment variables.
+
+```python
+--8<--
+examples/16_opentelemetry.py
+--8<--
+```
+
+## Redis shared state
+
+Install the `redis` extra and set `MCP_ROUTER_EXAMPLE_REDIS_URL` to a dedicated
+example database. The example clears only its own cache and CRM breaker keys.
+Two runtimes demonstrate cross-process cache hits and circuit state.
+
+```python
+--8<--
+examples/17_redis_shared_state.py
+--8<--
+```
+
+## Hybrid retrieval
+
+Set `MCP_ROUTER_EXAMPLE_EMBEDDINGS` for real semantic rankings. Without a model
+the example uses deterministic test embeddings to verify the integration.
+
+```python
+--8<--
+examples/18_hybrid_retrieval.py
+--8<--
+```
+
+## Read-only result caching
+
+```python
+--8<--
+examples/19_result_cache.py
+--8<--
+```

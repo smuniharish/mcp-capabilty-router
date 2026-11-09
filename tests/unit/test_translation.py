@@ -26,9 +26,7 @@ from mcp_capability_router._internal.translation import translate_error, transla
 def status_error(status: int) -> httpx2.HTTPStatusError:
     request = httpx2.Request("POST", "https://example.com/mcp")
     response = httpx2.Response(status, request=request)
-    return httpx2.HTTPStatusError(
-        f"status {status}", request=request, response=response
-    )
+    return httpx2.HTTPStatusError(f"status {status}", request=request, response=response)
 
 
 @pytest.mark.parametrize(

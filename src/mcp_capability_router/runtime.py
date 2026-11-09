@@ -5,16 +5,17 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import functools
+import inspect
 import logging
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Self
 
 import refresh_engine
-from aiolimiter import AsyncLimiter
-from purgatory import AsyncCircuitBreakerFactory
 from refresh_engine import (
+    AsyncEventPublisher,
     AsyncScheduler,
+    EventHandlerLike,
     EventPublisher,
     MetricsEventHandler,
     MetricsSink,
@@ -23,9 +24,9 @@ from refresh_engine import (
     RefreshResult,
     RefreshStatus,
     ResourceSelector,
+    StateStore,
     TriggerSource,
 )
-from tenacity import AsyncRetrying
 
 from ._internal.discovery import discover_capabilities
 from ._internal.metrics import ServerScopedSink
@@ -36,9 +37,10 @@ from ._internal.sources import CapabilitySource, RegistryOperation
 from ._internal.tools import capability_tool
 from .adapters import FastMCPAdapter, FastMCPTarget
 from .contracts import (
+    AdapterFactory,
     CapabilityRegistry,
     CapabilityRetriever,
-    Interceptor,
+    InterceptorLike,
     MCPAdapter,
     Operation,
     OperationContext,
@@ -56,12 +58,19 @@ from .errors import (
 from .models import Capability, CapabilityType, HealthState, Prompt, Resource, Tool
 from .refresh import RefreshEventSource, RefreshPolicy
 from .registry import InMemoryRegistry
+from .resilience import ResiliencePolicy
 from .retrieval import KeywordRetriever
 
 if TYPE_CHECKING:
     from langchain_core.tools import BaseTool
 
 logger = logging.getLogger("mcp_capability_router")
+
+type StateStoreFactory = Callable[[str], StateStore | Awaitable[StateStore]]
+"""Creates the refresh state store of a server from its ID; may be async."""
+
+type CapabilityFilter = Callable[[Capability], bool]
+"""Decides whether a capability may be retrieved."""
 
 
 @dataclass(slots=True)
@@ -89,20 +98,26 @@ async def _cancel(task: asyncio.Task[None]) -> None:
         await task
 
 
+def _unsubscribe(publisher: EventPublisher, handler: EventHandlerLike) -> None:
+    with contextlib.suppress(Exception):
+        publisher.unsubscribe(handler)
+
+
 class MCPRuntime:
     """Discovers, retrieves, and invokes the capabilities of MCP servers.
 
-    A runtime owns everything it uses — the servers and their connections, the
-    registry, retrieval caches, circuit breakers, schedulers, and background
-    tasks — and shares none of it with other runtimes. Create one runtime per
-    tenant, agent, or trust boundary, and close it with `close` or `async with`.
+    A runtime owns everything it creates — the servers and their connections, the
+    default registry, retrieval caches, circuit breakers, schedulers, and
+    background tasks — and shares none of it with other runtimes. Create one
+    runtime per tenant, agent, or trust boundary, and close it with `close` or
+    `async with`.
 
     Registering a server stores a factory, not a connection. Discovery lists
     capability metadata into the registry; retrieval ranks that metadata without
     calling any server; a server is connected only when an operation needs it.
-    Every operation on a server runs through one resilience pipeline: a
-    concurrency limit, interceptors, a circuit breaker per server and operation,
-    retries, rate limiting, and a timeout per attempt.
+    Every operation on a server runs through one resilience pipeline: concurrency
+    limits, interceptors, a circuit breaker per server and operation, retries,
+    rate limiting, and a timeout per attempt.
 
     Example:
         ```python
@@ -120,12 +135,10 @@ class MCPRuntime:
         registry: CapabilityRegistry | None = None,
         retriever: CapabilityRetriever | None = None,
         max_concurrency: int = 16,
-        operation_timeout: float | None = None,
-        retry: AsyncRetrying | None = None,
-        rate_limiter: AsyncLimiter | None = None,
-        circuit_breaker: AsyncCircuitBreakerFactory | None = None,
-        interceptors: Iterable[Interceptor] = (),
+        resilience: ResiliencePolicy | None = None,
+        interceptors: Iterable[InterceptorLike] = (),
         metrics: MetricsSink | None = None,
+        state_store_factory: StateStoreFactory | None = None,
     ) -> None:
         """Create a runtime.
 
@@ -136,32 +149,33 @@ class MCPRuntime:
                 `None`.
             max_concurrency: The maximum number of server operations that run at
                 the same time, across all servers.
-            operation_timeout: The timeout of each attempt of a server operation,
-                in seconds; no timeout when `None`.
-            retry: The retry policy of server operations; a single attempt when
-                `None`. The runtime always re-raises the last error. Use
-                `retry_if_exception(is_retryable)` as its predicate.
-            rate_limiter: A rate limit applied to every attempt of every server
-                operation; none when `None`.
-            circuit_breaker: A purgatory factory to share circuit-breaker state, for
-                example through Redis, between runtimes. When `None`, each server
-                gets its own in-memory breakers (5 failures, 30 seconds), which are
-                discarded when the server is unregistered.
-            interceptors: Callables that wrap every server operation, in order.
+            resilience: The timeouts, retries, rate limit, circuit breakers, and
+                per-server concurrency of every server registered without its own
+                policy; no timeout, a single attempt, and in-memory circuit
+                breakers per server when `None`.
+            interceptors: `Interceptor` instances or async functions that wrap
+                every server operation, in order.
             metrics: A refresh-engine metrics sink that receives the counters and
                 durations of server operations and refreshes.
+            state_store_factory: Creates the refresh state store of each server
+                registered without a `RefreshPolicy.state_store`, called with the
+                server ID at registration. It may be an async function. The state
+                lives in memory when `None`.
 
         Raises:
             ConfigurationError: If an argument is invalid.
         """
         if registry is not None and not isinstance(registry, CapabilityRegistry):
-            msg = f"registry {registry!r} does not implement CapabilityRegistry"
+            msg = f"registry {registry!r} does not subclass CapabilityRegistry"
             raise ConfigurationError(msg)
         if retriever is not None and not isinstance(retriever, CapabilityRetriever):
-            msg = f"retriever {retriever!r} does not implement CapabilityRetriever"
+            msg = f"retriever {retriever!r} does not subclass CapabilityRetriever"
             raise ConfigurationError(msg)
         if metrics is not None and not isinstance(metrics, MetricsSink):
-            msg = f"metrics {metrics!r} does not implement refresh_engine.MetricsSink"
+            msg = f"metrics {metrics!r} does not subclass refresh_engine.MetricsSink"
+            raise ConfigurationError(msg)
+        if state_store_factory is not None and not callable(state_store_factory):
+            msg = f"state_store_factory {state_store_factory!r} is not callable"
             raise ConfigurationError(msg)
         self._registry: CapabilityRegistry = (
             registry if registry is not None else InMemoryRegistry()
@@ -171,14 +185,13 @@ class MCPRuntime:
         )
         self._pipeline = OperationPipeline(
             max_concurrency=max_concurrency,
-            operation_timeout=operation_timeout,
-            retry=retry,
-            rate_limiter=rate_limiter,
-            circuit_breaker=circuit_breaker,
-            interceptors=tuple(interceptors),
+            policy=resilience if resilience is not None else ResiliencePolicy(),
+            interceptors=interceptors,
             metrics_sink=metrics,
         )
         self._metrics = metrics
+        self._state_store_factory = state_store_factory
+        self._stores: dict[int, str] = {}
         self._servers: dict[str, _Server] = {}
         self._closed = False
 
@@ -201,6 +214,11 @@ class MCPRuntime:
         return self._retriever
 
     @property
+    def resilience(self) -> ResiliencePolicy:
+        """The resilience policy of servers registered without their own."""
+        return self._pipeline.policy
+
+    @property
     def servers(self) -> tuple[str, ...]:
         """The IDs of the registered servers, in registration order."""
         return tuple(name for name, server in self._servers.items() if server.active)
@@ -213,23 +231,28 @@ class MCPRuntime:
     async def register_server(
         self,
         server_id: str,
-        factory: Callable[[], MCPAdapter],
+        factory: AdapterFactory,
         *,
         refresh: RefreshPolicy | None = None,
+        resilience: ResiliencePolicy | None = None,
     ) -> None:
         """Register a server without connecting to it.
 
         Args:
             server_id: A unique ID of 1 to 64 letters, digits, hyphens, or
                 underscores, starting with a letter or digit.
-            factory: Creates the adapter of the server. It is called on first
-                use, and again after `reconnect` or a lost connection.
-            refresh: When to refresh the capabilities of the server
-                automatically.
+            factory: Creates the adapter of the server; it may be an async
+                function. It is called on first use, and again after `reconnect`
+                or a lost connection.
+            refresh: When and how to refresh the capabilities of the server,
+                including its refresh state store and event publisher.
+            resilience: The resilience policy of the server; the runtime's
+                `resilience` when `None`.
 
         Raises:
-            ConfigurationError: If an argument is invalid, or the ID is taken by a
-                registered server or one that is still being unregistered.
+            ConfigurationError: If an argument is invalid, the ID is taken by a
+                registered server or one that is still being unregistered, or the
+                state store is used by another registered server.
             RefreshError: If `refresh.on_register` is set and the refresh fails;
                 the server is not registered then.
             ServerNotFoundError: If the server was unregistered before its
@@ -246,33 +269,49 @@ class MCPRuntime:
         if not isinstance(policy, RefreshPolicy):
             msg = f"refresh must be a RefreshPolicy, got {type(policy).__name__}"
             raise ConfigurationError(msg)
-        existing = self._servers.get(server_id)
-        if existing is not None:
-            state = "registered" if existing.active else "being unregistered"
-            msg = f"server {server_id!r} is already {state}"
+        if resilience is not None and not isinstance(resilience, ResiliencePolicy):
+            msg = f"resilience must be a ResiliencePolicy, got {type(resilience).__name__}"
+            raise ConfigurationError(msg)
+        self._ensure_available(server_id)
+        store = await self._state_store(server_id, policy)
+        self._ensure_open()
+        self._ensure_available(server_id)
+        if store is not None and id(store) in self._stores:
+            msg = (
+                f"the state store of server {server_id!r} is used by server "
+                f"{self._stores[id(store)]!r}; give each server its own store"
+            )
             raise ConfigurationError(msg)
         handle = ServerHandle(server_id, factory)
         source = CapabilitySource(
             functools.partial(self._discover, handle),
-            functools.partial(self._prune, server_id),
+            functools.partial(self._reconcile, server_id, restore=store is not None),
         )
-        engine = RefreshEngine(
-            source,
-            RegistryOperation(self.registry),
-            config=policy.config,
-            events=self._event_publisher(server_id, policy),
-        )
-        server = _Server(handle, policy, source, engine, contextlib.AsyncExitStack())
+        stack = contextlib.AsyncExitStack()
+        try:
+            engine = RefreshEngine(
+                source,
+                RegistryOperation(self.registry),
+                fingerprint=policy.fingerprint,
+                store=store,
+                config=policy.config,
+                events=self._event_publisher(server_id, policy, stack),
+            )
+        except BaseException:
+            await stack.aclose()
+            raise
+        server = _Server(handle, policy, source, engine, stack)
         self._servers[server_id] = server
-        self._pipeline.add_server(server_id)
+        if store is not None:
+            self._stores[id(store)] = server_id
+            stack.callback(self._stores.pop, id(store), None)
+        self._pipeline.add_server(server_id, resilience)
         async with server.lock:
             try:
                 server.stack.push_async_callback(handle.close)
                 await server.stack.enter_async_context(engine)
                 if policy.on_register:
-                    await self._refresh(
-                        server, mode=policy.mode, trigger=TriggerSource.MANUAL
-                    )
+                    await self._refresh(server, mode=policy.mode, trigger=TriggerSource.MANUAL)
                     self._ensure_registering(server_id, server)
                 if policy.interval is not None:
                     scheduler = AsyncScheduler(
@@ -308,23 +347,41 @@ class MCPRuntime:
         target: FastMCPTarget,
         *,
         refresh: RefreshPolicy | None = None,
+        resilience: ResiliencePolicy | None = None,
+        **client_options: Any,
     ) -> None:
         """Register an MCP server reached through FastMCP.
 
         Args:
             server_id: A unique ID; see `register_server`.
             target: A URL, a script path, an MCP configuration dictionary, an
-                in-process `FastMCP` server, a transport, or a `fastmcp.Client`.
-            refresh: When to refresh the capabilities of the server
-                automatically.
+                in-process `FastMCP` server, a transport, or a `fastmcp.Client`
+                configured with its own authentication, headers, and handlers.
+            refresh: When and how to refresh the capabilities of the server.
+            resilience: The resilience policy of the server; the runtime's
+                `resilience` when `None`.
+            **client_options: Keyword arguments of the `fastmcp.Client` that each
+                connection creates, such as `auth`, `timeout`, or
+                `sampling_handler`; see `FastMCPAdapter`.
 
         Raises:
             ConfigurationError: If an argument is invalid or the ID is taken.
             RefreshError: If `refresh.on_register` is set and the refresh fails.
             RuntimeClosedError: If the runtime is closed.
         """
+        from fastmcp import Client
+
+        if client_options and isinstance(target, Client):
+            msg = (
+                "client options cannot be applied to a prebuilt fastmcp.Client; "
+                "configure the client instead"
+            )
+            raise ConfigurationError(msg)
         await self.register_server(
-            server_id, functools.partial(FastMCPAdapter, target), refresh=refresh
+            server_id,
+            functools.partial(FastMCPAdapter, target, **client_options),
+            refresh=refresh,
+            resilience=resilience,
         )
 
     async def unregister_server(self, server_id: str) -> None:
@@ -407,9 +464,7 @@ class MCPRuntime:
             selector=selector,
         )
 
-    async def refresh(
-        self, *, mode: RefreshMode | None = None
-    ) -> dict[str, RefreshResult]:
+    async def refresh(self, *, mode: RefreshMode | None = None) -> dict[str, RefreshResult]:
         """Refresh every registered server concurrently.
 
         Every refresh runs to completion, even when others fail.
@@ -426,9 +481,7 @@ class MCPRuntime:
             RuntimeClosedError: If the runtime is closed.
         """
         self._ensure_open()
-        servers = {
-            name: server for name, server in self._servers.items() if server.active
-        }
+        servers = {name: server for name, server in self._servers.items() if server.active}
         outcomes = await asyncio.gather(
             *(
                 self._refresh(server, mode=mode, trigger=TriggerSource.MANUAL)
@@ -457,6 +510,8 @@ class MCPRuntime:
         type: CapabilityType | None = None,
         server_id: str | None = None,
         limit: int = 20,
+        where: CapabilityFilter | None = None,
+        include_unhealthy: bool = False,
     ) -> list[Capability]:
         """Rank the known capabilities against `query`, without calling any server.
 
@@ -465,6 +520,11 @@ class MCPRuntime:
             type: Only consider capabilities of this type.
             server_id: Only consider capabilities of this server.
             limit: The maximum number of capabilities to return.
+            where: Only consider capabilities for which it returns `True`, for
+                example `lambda c: isinstance(c, Tool) and c.read_only`.
+            include_unhealthy: Also consider capabilities of servers whose circuit
+                is open. They are left out by default, because calling them fails
+                without reaching the server until the circuit recovers.
 
         Returns:
             The best matches, best first.
@@ -479,6 +539,14 @@ class MCPRuntime:
         if server_id is not None:
             self._server(server_id)
         candidates = await self.registry.list(server_id=server_id, type=type)
+        if where is not None:
+            candidates = [capability for capability in candidates if where(capability)]
+        if not include_unhealthy and candidates:
+            unhealthy = await self._unhealthy({c.server_id for c in candidates})
+            if unhealthy:
+                candidates = [c for c in candidates if c.server_id not in unhealthy]
+        if not candidates:
+            return []
         return await self.retriever.retrieve(query, candidates, limit=limit)
 
     async def query(
@@ -488,6 +556,8 @@ class MCPRuntime:
         type: CapabilityType | None = None,
         server_id: str | None = None,
         limit: int = 20,
+        where: CapabilityFilter | None = None,
+        include_unhealthy: bool = False,
         refresh_servers: Iterable[str] = (),
     ) -> list[Capability]:
         """Retrieve, refreshing servers first when nothing matches.
@@ -502,6 +572,9 @@ class MCPRuntime:
             type: Only consider capabilities of this type.
             server_id: Only consider capabilities of this server.
             limit: The maximum number of capabilities to return.
+            where: Only consider capabilities for which it returns `True`.
+            include_unhealthy: Also consider capabilities of servers whose circuit
+                is open.
             refresh_servers: Servers to refresh on a miss, in addition to those
                 whose policy sets `on_query_miss`.
 
@@ -515,9 +588,16 @@ class MCPRuntime:
             RuntimeClosedError: If the runtime is closed.
         """
         hinted = {name: self._server(name) for name in refresh_servers}
-        matches = await self.retrieve(
-            query, type=type, server_id=server_id, limit=limit
+        retrieve = functools.partial(
+            self.retrieve,
+            query,
+            type=type,
+            server_id=server_id,
+            limit=limit,
+            where=where,
+            include_unhealthy=include_unhealthy,
         )
+        matches = await retrieve()
         if matches:
             return matches
         targets = hinted | {
@@ -532,7 +612,7 @@ class MCPRuntime:
         await asyncio.gather(
             *(self._background_refresh(name, TriggerSource.QUERY) for name in targets)
         )
-        return await self.retrieve(query, type=type, server_id=server_id, limit=limit)
+        return await retrieve()
 
     async def resolve(self, capability_id: str) -> Capability:
         """Return the capability with ID `capability_id`.
@@ -548,9 +628,7 @@ class MCPRuntime:
             raise CapabilityNotFoundError(msg)
         return capability
 
-    async def execute(
-        self, capability_id: str, arguments: Mapping[str, Any] | None = None
-    ) -> Any:
+    async def execute(self, capability_id: str, arguments: Mapping[str, Any] | None = None) -> Any:
         """Call a tool.
 
         Args:
@@ -631,9 +709,7 @@ class MCPRuntime:
         if missing:
             msg = f"prompt {prompt.name!r} requires the arguments {missing}"
             raise InvalidRequestError(msg)
-        invalid = sorted(
-            name for name, value in values.items() if not isinstance(value, str)
-        )
+        invalid = sorted(name for name, value in values.items() if not isinstance(value, str))
         if invalid:
             msg = f"prompt arguments must be strings; {invalid} are not"
             raise InvalidRequestError(msg)
@@ -678,8 +754,10 @@ class MCPRuntime:
 
         Running refreshes and registrations in progress are awaited; the
         registrations are undone. Capabilities stay in external registries. The
-        registry is closed even if closing the servers fails or is cancelled.
-        Calling `close` again has no effect.
+        registry and the circuit breakers are released even if closing the
+        servers fails or is cancelled, so bounding the shutdown with
+        `async with asyncio.timeout(10): await runtime.close()` still releases
+        them. Calling `close` again has no effect.
 
         Raises:
             ExceptionGroup: If closing some servers or the registry failed; every
@@ -694,22 +772,17 @@ class MCPRuntime:
         errors: list[BaseException] = []
         try:
             outcomes = await asyncio.gather(
-                *(
-                    self._dispose(name, server, forget=False)
-                    for name, server in servers
-                ),
+                *(self._dispose(name, server, forget=False) for name, server in servers),
                 return_exceptions=True,
             )
-            errors.extend(
-                outcome for outcome in outcomes if isinstance(outcome, BaseException)
-            )
+            errors.extend(outcome for outcome in outcomes if isinstance(outcome, BaseException))
         finally:
             try:
                 await self.registry.close()
             except Exception as error:
                 errors.append(error)
             finally:
-                self._pipeline.close()
+                await self._pipeline.aclose()
         if errors:
             msg = "errors while closing the runtime"
             raise BaseExceptionGroup(msg, errors)
@@ -727,6 +800,15 @@ class MCPRuntime:
             raise ServerNotFoundError(msg)
         return server
 
+    async def _unhealthy(self, server_ids: set[str]) -> set[str]:
+        ordered = sorted(server_ids)
+        states = await asyncio.gather(*(self._pipeline.health(server_id) for server_id in ordered))
+        return {
+            server_id
+            for server_id, state in zip(ordered, states, strict=True)
+            if state is HealthState.UNHEALTHY
+        }
+
     def _ensure_registering(self, server_id: str, server: _Server) -> None:
         """Raise if the registration of `server` was undone while in progress."""
         if server.active:
@@ -738,10 +820,7 @@ class MCPRuntime:
     async def _typed[C: Capability](self, capability_id: str, kind: type[C]) -> C:
         capability = await self.resolve(capability_id)
         if not isinstance(capability, kind):
-            msg = (
-                f"{capability_id!r} is a {capability.type}, "
-                f"not a {kind.__name__.lower()}"
-            )
+            msg = f"{capability_id!r} is a {capability.type}, not a {kind.__name__.lower()}"
             raise CapabilityTypeError(msg)
         return capability
 
@@ -761,9 +840,7 @@ class MCPRuntime:
         )
         return await self._pipeline.run(context, lambda: self._use(handle, use))
 
-    async def _use[T](
-        self, handle: ServerHandle, use: Callable[[MCPAdapter], Awaitable[T]]
-    ) -> T:
+    async def _use[T](self, handle: ServerHandle, use: Callable[[MCPAdapter], Awaitable[T]]) -> T:
         adapter = await handle.adapter()
         try:
             return await use(adapter)
@@ -775,9 +852,7 @@ class MCPRuntime:
         server_id = handle.server_id
         return await self._pipeline.run(
             OperationContext(server_id=server_id, operation=Operation.DISCOVER),
-            lambda: self._use(
-                handle, lambda adapter: discover_capabilities(adapter, server_id)
-            ),
+            lambda: self._use(handle, lambda adapter: discover_capabilities(adapter, server_id)),
         )
 
     async def _refresh(
@@ -821,9 +896,7 @@ class MCPRuntime:
                 error,
             )
         except Exception:
-            logger.exception(
-                "Automatic %s refresh of server %r failed", trigger, server_id
-            )
+            logger.exception("Automatic %s refresh of server %r failed", trigger, server_id)
 
     async def _watch(self, server_id: str, events: RefreshEventSource) -> None:
         try:
@@ -845,39 +918,71 @@ class MCPRuntime:
         except Exception:
             logger.exception("The change events of server %r failed", server_id)
 
-    def _event_publisher(
-        self, server_id: str, policy: RefreshPolicy
-    ) -> EventPublisher | None:
-        if self._metrics is None and not policy.event_handlers:
+    def _ensure_available(self, server_id: str) -> None:
+        existing = self._servers.get(server_id)
+        if existing is not None:
+            state = "registered" if existing.active else "being unregistered"
+            msg = f"server {server_id!r} is already {state}"
+            raise ConfigurationError(msg)
+
+    async def _state_store(self, server_id: str, policy: RefreshPolicy) -> StateStore | None:
+        if policy.state_store is not None:
+            return policy.state_store
+        if self._state_store_factory is None:
             return None
-        publisher = EventPublisher()
-        if self._metrics is not None:
-            publisher.subscribe(
-                MetricsEventHandler(ServerScopedSink(self._metrics, server_id))
+        store = self._state_store_factory(server_id)
+        if inspect.isawaitable(store):
+            store = await store
+        if not isinstance(store, StateStore):
+            msg = (
+                f"state_store_factory returned {store!r} for server {server_id!r}, "
+                "which does not subclass refresh_engine.StateStore"
             )
-        for handler in policy.event_handlers:
+            raise ConfigurationError(msg)
+        return store
+
+    def _event_publisher(
+        self, server_id: str, policy: RefreshPolicy, stack: contextlib.AsyncExitStack
+    ) -> EventPublisher | None:
+        handlers: list[EventHandlerLike] = list(policy.event_handlers)
+        if self._metrics is not None:
+            handlers.append(MetricsEventHandler(ServerScopedSink(self._metrics, server_id)))
+        if policy.events is None and not handlers:
+            return None
+        publisher = policy.events if policy.events is not None else AsyncEventPublisher()
+        for handler in handlers:
             publisher.subscribe(handler)
+            stack.callback(_unsubscribe, publisher, handler)
         return publisher
 
-    async def _prune(self, server_id: str, discovered: frozenset[str]) -> None:
-        """Remove capabilities of a server that it no longer offers.
+    async def _reconcile(
+        self, server_id: str, discovered: Sequence[Capability], *, restore: bool
+    ) -> None:
+        """Align the registry with the first discovery of a registration.
 
-        A new registration starts without refresh state, so its first refresh
-        stores every capability but cannot know which ones an earlier
-        registration, such as a previous process with a durable registry,
-        stored and the server has since removed.
+        A new registration cannot know which capabilities an earlier one, such as
+        a previous process with a durable registry, stored and the server has
+        since removed, so they are removed here. With a state store, refresh-engine
+        skips the capabilities whose fingerprints it already holds, so the ones
+        that the registry lacks, for example after a restart with an in-memory
+        registry, are stored here.
         """
-        for capability in await self.registry.list(server_id=server_id):
-            if capability.capability_id not in discovered:
+        ids = {capability.capability_id for capability in discovered}
+        stored = await self.registry.list(server_id=server_id)
+        for capability in stored:
+            if capability.capability_id not in ids:
                 await self.registry.remove(capability.capability_id)
+        if restore:
+            known = {capability.capability_id for capability in stored}
+            missing = [c for c in discovered if c.capability_id not in known]
+            if missing:
+                await self.registry.upsert_many(missing)
 
     async def _dispose(self, server_id: str, server: _Server, *, forget: bool) -> None:
         async with server.lock:
             await self._dispose_locked(server_id, server, forget=forget)
 
-    async def _dispose_locked(
-        self, server_id: str, server: _Server, *, forget: bool
-    ) -> None:
+    async def _dispose_locked(self, server_id: str, server: _Server, *, forget: bool) -> None:
         if server.disposed:
             return
         server.disposed = True

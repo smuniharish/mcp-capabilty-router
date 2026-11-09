@@ -23,6 +23,11 @@ result. `query` takes the same arguments and refreshes servers when nothing matc
 the servers named in `refresh_servers`, and the servers whose refresh policy sets
 `on_query_miss`. See [Discovery and refresh](refresh.md#refresh-on-a-query-miss).
 
+`where` accepts a predicate over a capability and filters before ranking. Servers
+with open circuits are excluded by default; `include_unhealthy=True` explicitly
+includes them. Retrieval predicates are not authorization checks: protect execution
+with an interceptor as well.
+
 ## Keyword retrieval
 
 `KeywordRetriever` is the default. It needs no model, no service, and no tuning, it
@@ -103,14 +108,15 @@ from langchain.embeddings import init_embeddings
 
 from mcp_capability_router import EmbeddingRetriever, MCPRuntime
 
-runtime = MCPRuntime(
-    retriever=EmbeddingRetriever(init_embeddings("openai:text-embedding-3-small"))
-)
+runtime = MCPRuntime(retriever=EmbeddingRetriever(init_embeddings("openai:text-embedding-3-small")))
 ```
 
 Each capability is embedded once, from its title, name, description, tags, and URI,
 and embedded again only when that text changes. The vectors live in a LangChain
-`InMemoryVectorStore` inside the retriever. Each query embeds the query text once.
+`InMemoryVectorStore` by default. Pass `vector_store=your_store` to use any LangChain
+`VectorStore`, with `embeddings` inferred from the store when available. Give each
+retriever its own collection: capability IDs are document IDs. Compatible stores
+reuse unchanged documents across restarts. Each query embeds the query text once.
 
 `max_documents`, 50,000 by default, bounds the number of stored vectors. When it is
 exceeded, the vectors of the capabilities that queries have not seen for the longest
@@ -135,8 +141,11 @@ retriever = EmbeddingRetriever(embeddings, reranker=reranker, fetch_k=30)
 | Deterministic | Yes | As deterministic as the model |
 | Best for | Well-named tools, tests, offline use, large catalogs | Natural-language requests, synonyms, many languages |
 
-Both are measured in [Performance](performance.md). To combine rankings, or to rank
-with a service of your own, implement the `CapabilityRetriever` contract; see
+Both are measured in [Performance](performance.md). Combine rankings with
+`HybridRetriever([KeywordRetriever(), EmbeddingRetriever(embeddings)], weights=[1, 2])`.
+Rankings are fused concurrently using weighted reciprocal rank fusion, with a
+default rank constant of 60 and deterministic capability-ID tie breaking.
+To rank with a service of your own, subclass `CapabilityRetriever`; see
 [Extending the router](extending.md#retrievers).
 
 ## Write capabilities that retrieve well

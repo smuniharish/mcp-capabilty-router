@@ -1,10 +1,12 @@
 # mcp-capability-router
 
-[![PyPI](https://img.shields.io/pypi/v/mcp-capability-router)](https://pypi.org/project/mcp-capability-router/)
-[![Python](https://img.shields.io/pypi/pyversions/mcp-capability-router)](https://pypi.org/project/mcp-capability-router/)
-[![CI](https://github.com/smuniharish/mcp-capabilty-router/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/smuniharish/mcp-capabilty-router/actions/workflows/ci.yml)
-[![Documentation](https://readthedocs.org/projects/mcp-capabilty-router/badge/?version=latest)](https://mcp-capabilty-router.readthedocs.io/en/latest/)
-[![License](https://img.shields.io/pypi/l/mcp-capability-router)](https://github.com/smuniharish/mcp-capabilty-router/blob/HEAD/LICENSE)
+<p align="center">
+  <a href="https://pypi.org/project/mcp-capability-router/"><img src="https://img.shields.io/pypi/v/mcp-capability-router" alt="PyPI"></a>
+  <a href="https://pypi.org/project/mcp-capability-router/"><img src="https://img.shields.io/pypi/pyversions/mcp-capability-router" alt="Python"></a>
+  <a href="https://github.com/smuniharish/mcp-capabilty-router/actions/workflows/ci.yml"><img src="https://github.com/smuniharish/mcp-capabilty-router/actions/workflows/ci.yml/badge.svg?branch=master" alt="CI"></a>
+  <a href="https://mcp-capabilty-router.readthedocs.io/en/latest/"><img src="https://readthedocs.org/projects/mcp-capabilty-router/badge/?version=latest" alt="Documentation"></a>
+  <a href="https://github.com/smuniharish/mcp-capabilty-router/blob/HEAD/LICENSE"><img src="https://img.shields.io/pypi/l/mcp-capability-router" alt="License"></a>
+</p>
 
 **Give every agent the right MCP tools, resources, and prompts, from any number of
 servers, through one resilient runtime.**
@@ -44,8 +46,11 @@ however many servers and tools you register.
   LangChain's human-in-the-loop middleware.
 - **Isolated and observable.** One runtime per tenant shares nothing with others.
   Health states, metrics for every operation, and standard logging.
-- **Typed and extensible.** Fully type-annotated, with protocols for registries,
-  retrievers, adapters, and interceptors.
+- **Typed and extensible.** Fully type-annotated ABCs for registries, retrievers,
+  adapters, and interceptors, with reusable conformance tests.
+- **Application-owned infrastructure.** Supply refresh StateStores, event publishers,
+  fingerprints, FastMCP clients, vector stores, or result-cache stores. Fuse keyword
+  and semantic rankings, share circuits in Redis, and export OpenTelemetry spans.
 
 ## Installation
 
@@ -54,6 +59,10 @@ mcp-capability-router requires Python 3.12 or newer.
 ```bash
 pip install mcp-capability-router
 ```
+
+Use `pip install "mcp-capability-router[otel,redis]"` for OpenTelemetry and Redis
+circuit storage. Configure resilience with `MCPRuntime(resilience=ResiliencePolicy(...))`;
+individual registrations can supply their own policy.
 
 ## Quick start
 
@@ -85,9 +94,7 @@ def list_alerts(region: str) -> list[str]:
 
 async def main() -> None:
     async with MCPRuntime() as runtime:
-        await runtime.register_mcp(
-            "weather", weather, refresh=RefreshPolicy(on_register=True)
-        )
+        await runtime.register_mcp("weather", weather, refresh=RefreshPolicy(on_register=True))
         [tool] = await runtime.retrieve("What is the forecast for Paris?", limit=1)
         print(tool.capability_id)
 
