@@ -1,0 +1,8 @@
+tools: ['search', 'get_schema', 'execute']
+search found:
+3 of 4 tools:
+
+- billing_list_invoices: List the invoices of a customer.
+- billing_issue_refund: Refund part or all of a paid invoice.
+- crm_search_customers: Search customers by name.
+execute returned: {"customer":"Acme Corp","invoices":["inv-1"]}

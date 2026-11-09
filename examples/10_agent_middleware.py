@@ -4,7 +4,8 @@
 message and adds them to the model call; the agent starts without any tools.
 Tool calls run through the runtime's resilience pipeline.
 
-Requires a chat model, named as for `langchain.chat_models.init_chat_model`:
+Requires the `langchain` extra and a chat model, named as for
+`langchain.chat_models.init_chat_model`:
 
     MCP_ROUTER_EXAMPLE_MODEL=openai:gpt-5.4-mini   # and OPENAI_API_KEY
 """
@@ -18,7 +19,8 @@ from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, ToolMessage
 
-from mcp_capability_router import CapabilityRoutingMiddleware, MCPRuntime, RefreshPolicy
+from mcp_capability_router import MCPRuntime, RefreshPolicy
+from mcp_capability_router.integrations.langchain import CapabilityRoutingMiddleware
 
 QUESTION = "Which invoices does customer c-100 have?"
 

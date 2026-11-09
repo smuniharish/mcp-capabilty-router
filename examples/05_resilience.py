@@ -103,7 +103,7 @@ async def main() -> None:
 
         print("transient failures are retried:")
         result = await runtime.execute("flaky:tool:search_customers", {"query": "globex"})
-        print(f"  found {result.artifact['structured_content']['result'][0]['name']}")
+        print(f"  found {result.data[0]['name']}")
 
         print("\nrepeated failures open the circuit:")
         for _ in range(3):

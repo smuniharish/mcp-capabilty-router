@@ -31,8 +31,8 @@ def build_workflow(runtime: MCPRuntime) -> CompiledStateGraph[Request]:
         return {"capability_id": match.capability_id}
 
     async def act(state: Request) -> dict[str, Any]:
-        message = await runtime.execute(state.capability_id, state.arguments)
-        return {"result": message.artifact["structured_content"]["result"]}
+        result = await runtime.execute(state.capability_id, state.arguments)
+        return {"result": result.data}
 
     def report(state: Request) -> dict[str, Any]:
         return {"answer": f"{state.capability_id} -> {state.result}"}

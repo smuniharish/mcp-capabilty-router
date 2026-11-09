@@ -30,11 +30,15 @@ from refresh_engine import (
 
 from ._internal.discovery import discover_capabilities
 from ._internal.metrics import ServerScopedSink
-from ._internal.naming import validate_limit, validate_server_id
+from ._internal.naming import (
+    qualified_tool_name,
+    split_qualified_tool_name,
+    validate_limit,
+    validate_server_id,
+)
 from ._internal.pipeline import OperationPipeline
 from ._internal.servers import ServerHandle
 from ._internal.sources import CapabilitySource, RegistryOperation
-from ._internal.tools import capability_tool
 from .adapters import FastMCPAdapter, FastMCPTarget
 from .contracts import (
     AdapterFactory,
@@ -55,14 +59,25 @@ from .errors import (
     ServerConnectionError,
     ServerNotFoundError,
 )
-from .models import Capability, CapabilityType, HealthState, Prompt, Resource, Tool
+from .models import (
+    Capability,
+    CapabilityType,
+    HealthState,
+    Prompt,
+    Resource,
+    Tool,
+    make_capability_id,
+)
 from .refresh import RefreshEventSource, RefreshPolicy
 from .registry import InMemoryRegistry
 from .resilience import ResiliencePolicy
-from .retrieval import KeywordRetriever
+from .retrieval import QdrantRetriever
+from .tools import RoutedTool
 
 if TYPE_CHECKING:
-    from langchain_core.tools import BaseTool
+    from fastmcp import FastMCP
+
+    from .gateway import GatewayMode
 
 logger = logging.getLogger("mcp_capability_router")
 
@@ -145,8 +160,9 @@ class MCPRuntime:
         Args:
             registry: Where capability metadata is stored; an `InMemoryRegistry`
                 when `None`. The runtime closes it when it closes.
-            retriever: How capabilities are ranked; a `KeywordRetriever` when
-                `None`.
+            retriever: How capabilities are ranked; a `QdrantRetriever` with an
+                in-memory collection when `None`. The runtime closes it when it
+                closes.
             max_concurrency: The maximum number of server operations that run at
                 the same time, across all servers.
             resilience: The timeouts, retries, rate limit, circuit breakers, and
@@ -181,7 +197,7 @@ class MCPRuntime:
             registry if registry is not None else InMemoryRegistry()
         )
         self._retriever: CapabilityRetriever = (
-            retriever if retriever is not None else KeywordRetriever()
+            retriever if retriever is not None else QdrantRetriever()
         )
         self._pipeline = OperationPipeline(
             max_concurrency=max_concurrency,
@@ -636,7 +652,8 @@ class MCPRuntime:
             arguments: The tool arguments.
 
         Returns:
-            Whatever the adapter returns; a `ToolMessage` for `FastMCPAdapter`.
+            Whatever the adapter returns; FastMCP's `CallToolResult` for
+            `FastMCPAdapter`.
 
         Raises:
             CapabilityNotFoundError: If the tool is unknown.
@@ -720,24 +737,171 @@ class MCPRuntime:
             lambda adapter: adapter.get_prompt(prompt.name, values),
         )
 
-    async def as_tool(self, capability_id: str, *, name: str | None = None) -> BaseTool:
-        """Return a LangChain tool that calls a routed tool through this runtime.
-
-        The tool uses the capability's JSON schema, runs through the resilience
-        pipeline, returns the tool content and its structured artifact, and turns
-        router errors and timeouts into error tool messages for the model. It is
-        asynchronous.
+    async def tool(self, capability_id: str, *, name: str | None = None) -> RoutedTool:
+        """Return a routed tool that calls the tool `capability_id`.
 
         Args:
             capability_id: The ID of the tool.
-            name: The tool name shown to the model; the MCP tool name by default.
+            name: The name shown to the model; the MCP tool name by default.
 
         Raises:
             CapabilityNotFoundError: If the tool is unknown.
             CapabilityTypeError: If the capability is not a tool.
             RuntimeClosedError: If the runtime is closed.
         """
-        return capability_tool(self, await self._typed(capability_id, Tool), name=name)
+        capability = await self._typed(capability_id, Tool)
+        return RoutedTool(name or capability.name, capability, self)
+
+    async def route_tools(
+        self,
+        query: str,
+        *,
+        server_id: str | None = None,
+        limit: int = 5,
+        where: Callable[[Tool], bool] | None = None,
+        include_unhealthy: bool = False,
+    ) -> list[RoutedTool]:
+        """Return the tools that best match `query`, ready to show to a model.
+
+        Tools are found with `query`, so servers whose policy sets
+        `on_query_miss` are refreshed when nothing matches. Tool names are the
+        MCP tool names when `server_id` is given; otherwise they are prefixed
+        with the server ID, as in `filesystem_read_text_file`, so tools of
+        different servers never collide. `resolve_tool` maps those names back.
+
+        Args:
+            query: What the tool should do, typically the latest user message.
+            server_id: Only route the tools of this server.
+            limit: The maximum number of tools to return.
+            where: Only route the tools for which it returns `True`, for example
+                `lambda tool: not tool.destructive`.
+            include_unhealthy: Also route tools of servers whose circuit is open.
+
+        Returns:
+            The best matches, best first.
+
+        Raises:
+            ConfigurationError: If `limit` or `where` is invalid.
+            ServerNotFoundError: If `server_id` is not registered.
+            RuntimeClosedError: If the runtime is closed.
+        """
+        allows = self._tool_filter(where)
+        capabilities = await self.query(
+            query,
+            type=CapabilityType.TOOL,
+            server_id=server_id,
+            limit=limit,
+            where=allows,
+            include_unhealthy=include_unhealthy,
+        )
+        return [
+            RoutedTool(self._routed_name(tool, server_id), tool, self)
+            for tool in capabilities
+            if isinstance(tool, Tool)
+        ]
+
+    async def resolve_tool(
+        self,
+        name: str,
+        *,
+        server_id: str | None = None,
+        where: Callable[[Tool], bool] | None = None,
+    ) -> RoutedTool | None:
+        """Return the routed tool that a model called by `name`.
+
+        `name` is a name returned by `route_tools` with the same `server_id`:
+        the MCP tool name when `server_id` is given, the server-prefixed name
+        otherwise. Use it when a model calls a tool that was routed on an
+        earlier turn.
+
+        Args:
+            name: The tool name that the model used.
+            server_id: The server that the tools were routed from, if any.
+            where: Only resolve tools for which it returns `True`; pass the
+                filter that `route_tools` used.
+
+        Returns:
+            The routed tool, or `None` if no known tool has that name.
+
+        Raises:
+            ConfigurationError: If `where` is invalid.
+            InvalidRequestError: If the name matches tools of several servers.
+            ServerNotFoundError: If `server_id` is not registered.
+            RuntimeClosedError: If the runtime is closed.
+        """
+        allows = self._tool_filter(where)
+        if server_id is not None:
+            self._server(server_id)
+            candidates = [(server_id, name)]
+        else:
+            self._ensure_open()
+            candidates = split_qualified_tool_name(name, self.servers)
+        ids = [
+            make_capability_id(candidate, CapabilityType.TOOL, tool_name)
+            for candidate, tool_name in candidates
+        ]
+        found = await self.registry.get_many(ids)
+        matches = [tool for key in ids if isinstance(tool := found.get(key), Tool) and allows(tool)]
+        if len(matches) > 1:
+            servers = ", ".join(sorted(match.server_id for match in matches))
+            msg = f"tool name {name!r} is ambiguous between servers: {servers}"
+            raise InvalidRequestError(msg)
+        return RoutedTool(name, matches[0], self) if matches else None
+
+    @staticmethod
+    def _tool_filter(where: Callable[[Tool], bool] | None) -> CapabilityFilter:
+        if where is not None and not callable(where):
+            msg = f"where {where!r} is not callable"
+            raise ConfigurationError(msg)
+        return lambda capability: (
+            isinstance(capability, Tool) and (where is None or where(capability))
+        )
+
+    @staticmethod
+    def _routed_name(tool: Tool, server_id: str | None) -> str:
+        if server_id is not None:
+            return tool.name
+        return qualified_tool_name(tool.server_id, tool.name)
+
+    def as_mcp_server(
+        self,
+        name: str = "mcp-capability-router",
+        *,
+        mode: GatewayMode = "search",
+        max_results: int = 5,
+        **server_options: Any,
+    ) -> FastMCP:
+        """Return a FastMCP server that serves the router to any MCP client.
+
+        The server offers the tools, resources, and prompts of every registered
+        server, and calls them through the runtime, so the resilience pipeline,
+        interceptors, metrics, and health tracking apply. Tools and prompts are
+        named `{server_id}_{name}`. Run it with any FastMCP transport, for
+        example `await server.run_async(transport="http")`, or connect to it
+        in-process with `fastmcp.Client(server)`. Keep the runtime open while
+        the server runs.
+
+        Args:
+            name: The server name that clients see.
+            mode: What clients see of the tools: `"search"`, a `search_tools`
+                tool ranked by the runtime's retriever and a `call_tool` tool;
+                `"catalog"`, every tool; or `"code"`, experimental code mode, in
+                which the model writes Python that calls tools in a sandbox
+                (needs the `codemode` extra).
+            max_results: The maximum number of tools per search.
+            **server_options: Options of `fastmcp.FastMCP`, such as
+                `instructions`, `auth`, `middleware`, extra `providers`, or extra
+                `transforms`.
+
+        Raises:
+            ConfigurationError: If `mode` or `max_results` is invalid, or code
+                mode is requested without the `codemode` extra.
+            RuntimeClosedError: If the runtime is closed.
+        """
+        from .gateway import build_server
+
+        self._ensure_open()
+        return build_server(self, name=name, mode=mode, max_results=max_results, **server_options)
 
     async def health(self, server_id: str) -> HealthState:
         """Return the health of a server, the worst among its circuits.
@@ -750,18 +914,18 @@ class MCPRuntime:
         return await self._pipeline.health(server_id)
 
     async def close(self) -> None:
-        """Stop automatic refreshes, close every server, and close the registry.
+        """Stop refreshing, then close every server, the registry, and the retriever.
 
         Running refreshes and registrations in progress are awaited; the
         registrations are undone. Capabilities stay in external registries. The
-        registry and the circuit breakers are released even if closing the
-        servers fails or is cancelled, so bounding the shutdown with
+        registry, the retriever, and the circuit breakers are released even if
+        closing the servers fails or is cancelled, so bounding the shutdown with
         `async with asyncio.timeout(10): await runtime.close()` still releases
         them. Calling `close` again has no effect.
 
         Raises:
-            ExceptionGroup: If closing some servers or the registry failed; every
-                other resource is still closed.
+            ExceptionGroup: If closing some servers, the registry, or the retriever
+                failed; every other resource is still closed.
         """
         if self._closed:
             return
@@ -778,9 +942,11 @@ class MCPRuntime:
             errors.extend(outcome for outcome in outcomes if isinstance(outcome, BaseException))
         finally:
             try:
-                await self.registry.close()
-            except Exception as error:
-                errors.append(error)
+                for resource in (self.registry, self.retriever):
+                    try:
+                        await resource.close()
+                    except Exception as error:
+                        errors.append(error)
             finally:
                 await self._pipeline.aclose()
         if errors:

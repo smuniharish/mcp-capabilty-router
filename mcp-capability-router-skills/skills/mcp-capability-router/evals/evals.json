@@ -5,8 +5,8 @@
       "id": 1,
       "prompt": "Connect this application's CRM and billing MCP servers to a LangChain agent, exposing only three relevant tools per turn.",
       "files": ["files/app.py"],
-      "expected_output": "An async runtime lifespan, refresh policies, and CapabilityRoutingMiddleware.",
-      "assertions": ["Uses on_register or explicit refresh before retrieval", "Invokes the agent asynchronously", "Closes the runtime and scopes credentials"]
+      "expected_output": "An async runtime lifespan, refresh policies, and CapabilityRoutingMiddleware from mcp_capability_router.integrations.langchain.",
+      "assertions": ["Imports the middleware from mcp_capability_router.integrations.langchain with limit=3", "Uses on_register or explicit refresh before retrieval", "Invokes the agent asynchronously", "Closes the runtime and scopes credentials"]
     },
     {
       "id": 2,
@@ -19,6 +19,12 @@
       "prompt": "Add read-only result caching and OpenTelemetry traces to the router without leaking tool arguments.",
       "expected_output": "Tracing before ToolResultCache, with application-owned telemetry and cache storage.",
       "assertions": ["Uses the otel extra and OpenTelemetryInterceptor", "Caches safe reads only and documents invalidation", "Closes application-owned providers and stores"]
+    },
+    {
+      "id": 4,
+      "prompt": "Give our OpenAI SDK agent only the relevant MCP tools per request, and expose the same servers to Claude Desktop through one MCP endpoint.",
+      "expected_output": "route_tools converted to OpenAI function tools and executed with RoutedTool, plus as_mcp_server in search mode.",
+      "assertions": ["Uses runtime.route_tools and awaits the RoutedTool with the model arguments", "Returns structured_content or text content to the model and handles router errors", "Serves runtime.as_mcp_server without bypassing the runtime, behind authentication over HTTP"]
     }
   ]
 }

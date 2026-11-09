@@ -21,8 +21,8 @@ async def main() -> None:
 
         [tool] = await runtime.retrieve("refund an invoice", type=CapabilityType.TOOL, limit=1)
         print(f"\ntool {tool.name} is destructive: {tool.metadata['annotations']}")
-        message = await runtime.execute(tool.capability_id, {"invoice_id": "inv-1", "amount": 200})
-        print(f"refund: {message.artifact['structured_content']}")
+        result = await runtime.execute(tool.capability_id, {"invoice_id": "inv-1", "amount": 200})
+        print(f"refund: {result.data}")
 
         [policy] = await runtime.retrieve("refund policy", type=CapabilityType.RESOURCE, limit=1)
         [contents] = await runtime.read_resource(policy.capability_id)

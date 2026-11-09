@@ -10,49 +10,60 @@ from mcp_capability_router import CapabilityType
 
 tools = await runtime.retrieve("refund an invoice", type=CapabilityType.TOOL, limit=5)
 tools = await runtime.query("refund an invoice", server_id="billing", limit=5)
+routed = await runtime.route_tools("refund an invoice", limit=5)
 ```
 
 - `type` and `server_id` filter candidates before ranking; use them when known.
-- `query` refreshes servers with `on_query_miss`, or those in `refresh_servers`, when
-  nothing matches, then retrieves again.
+- `query` and `route_tools` refresh servers with `on_query_miss` when nothing
+  matches, then retrieve again.
 - Results are best first and at most `limit` long; an empty list means no match.
 
-## Choose a retriever
+## QdrantRetriever, the default
 
-| Need | Retriever |
+| Need | Configuration |
 | --- | --- |
-| Deterministic, offline, no model, large catalogs | `KeywordRetriever()` (the default) |
-| Natural-language requests, synonyms, other languages | `EmbeddingRetriever(embeddings)` |
-| Both | A custom retriever that fuses both rankings; see [extensions.md](extensions.md) |
+| Deterministic, offline, no model | `QdrantRetriever()`: BM25 in an in-process collection |
+| Natural-language requests, synonyms | `QdrantRetriever(embedder=embedder)`: hybrid BM25 and dense |
+| Meaning only | `mode="dense"` with an embedder |
+| Shared index across processes | `client=AsyncQdrantClient(url=...)`, `collection_name=...` |
+| Fusion | `fusion="rrf"` (default, `rrf_k`) or `"dbsf"`; `prefetch_limit` per ranking |
 
 ```python
-from langchain.embeddings import init_embeddings
+from qdrant_client import AsyncQdrantClient
 
-from mcp_capability_router import EmbeddingRetriever, MCPRuntime
+from mcp_capability_router import MCPRuntime, QdrantRetriever
 
-runtime = MCPRuntime(retriever=EmbeddingRetriever(init_embeddings("openai:text-embedding-3-small")))
+retriever = QdrantRetriever(
+    embedder=my_embedder,
+    client=AsyncQdrantClient(url="http://localhost:6333"),
+    collection_name="support_capabilities",
+)
+runtime = MCPRuntime(retriever=retriever)
 ```
 
-## How KeywordRetriever ranks
+- An embedder subclasses `Embedder` with async `embed_documents` and
+  `embed_query`. With the `langchain` extra, `LangChainEmbedder(embeddings)`
+  wraps any LangChain embedding model.
+- The retriever closes only a client it created; close shared clients after the
+  runtime.
+- Give each catalog its own collection.
 
-- Names and identifiers are split into words: `read_text_file`, `readTextFile`, and
-  `read-text-file` all contain `read`, `text`, and `file`.
-- A query word matches a capability word when it is that word, a prefix of it (3+
-  characters), or shares its first 4+ characters. `read` does not match `thread`.
-- Weights: name or title 3, tag 2, description or URI 1. Exact words count fully;
-  prefixes and shared stems count in proportion to how much of the words they cover.
-- Rare query words count more (inverse document frequency); ties break by capability
-  ID; stop words are ignored.
-- It matches words, not meanings: `find` does not match `search`.
+## How BM25 ranks
 
-## How EmbeddingRetriever ranks
+- Identifiers are split into words: `read_text_file` and `readTextFile` both
+  contain `read`, `text`, and `file`. Plurals match their singular; words that
+  share their first five letters match partly.
+- Weights: name or title 3, tag 2, description or URI 1. Rare words count more.
+- Equal scores order by capability ID, so rankings are deterministic.
+- It matches words, not meanings: `find` does not match `search`. Add an
+  embedder for meaning.
 
-- Embeds each capability's title, name, description, tags, and URI once, and again
-  only when that text changes; vectors live in a LangChain `InMemoryVectorStore`.
-- One embedding call per query.
-- `reranker` takes any LangChain `BaseDocumentCompressor`; it re-ranks the best
-  `fetch_k` matches.
-- `max_documents` (50,000) bounds stored vectors; the least recently seen are evicted.
+## Indexing
+
+- Capabilities are indexed on first sight and again only when their text
+  changes; an external collection that already holds them is not embedded again.
+- `max_points` (50,000) bounds the index; the least recently seen are evicted.
+- Each query searches only its candidates.
 
 ## Improve results
 
@@ -60,4 +71,4 @@ runtime = MCPRuntime(retriever=EmbeddingRetriever(init_embeddings("openai:text-e
    descriptions with the users' words, and FastMCP `tags`.
 2. Narrow candidates with `server_id` and `type`.
 3. Raise `limit` so that the model can choose.
-4. Switch to, or fuse with, embeddings.
+4. Add an embedder for hybrid ranking.

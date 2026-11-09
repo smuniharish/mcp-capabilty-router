@@ -1,0 +1,6 @@
+tools: ['search_tools', 'call_tool']
+search_tools found: ['billing_issue_refund', 'billing_list_invoices']
+call_tool returned: {'invoice_id': 'inv-1', 'refunded': 50}
+resources: ['crm://schema/customer', 'billing://policies/refunds', 'docs://guides/billing', 'docs://guides/getting-started']
+prompt: Write a short, friendly follow-up email to Globex about renewal.
+catalog mode lists 5 tools

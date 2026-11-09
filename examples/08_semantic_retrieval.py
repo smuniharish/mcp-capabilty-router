@@ -1,10 +1,12 @@
-"""Rank capabilities by meaning with any LangChain embedding model.
+"""Rank capabilities by meaning as well as by words.
 
-`EmbeddingRetriever` embeds every capability once, keeps the vectors in a
-LangChain `InMemoryVectorStore`, and ranks candidates by similarity, so requests
-that share no words with a tool still find it.
+`QdrantRetriever` ranks with BM25 by default. Give it an embedder and it ranks
+by meaning too, fusing both rankings, so requests that share no words with a
+tool still find it. `LangChainEmbedder` wraps any LangChain embedding model;
+subclass `Embedder` to use any other embedding service.
 
-Requires an embedding model, named as for `langchain.embeddings.init_embeddings`:
+Requires the `langchain` extra and an embedding model, named as for
+`langchain.embeddings.init_embeddings`:
 
     MCP_ROUTER_EXAMPLE_EMBEDDINGS=openai:text-embedding-3-small   # and OPENAI_API_KEY
 """
@@ -16,7 +18,8 @@ from common import billing_server, crm_server, docs_server
 from langchain.embeddings import init_embeddings
 from langchain_core.embeddings import Embeddings
 
-from mcp_capability_router import EmbeddingRetriever, MCPRuntime, RefreshPolicy
+from mcp_capability_router import MCPRuntime, QdrantRetriever, RefreshPolicy
+from mcp_capability_router.integrations.langchain import LangChainEmbedder
 
 REQUESTS = (
     "give a customer their money back",
@@ -26,7 +29,8 @@ REQUESTS = (
 
 
 async def main(embeddings: Embeddings) -> None:
-    async with MCPRuntime(retriever=EmbeddingRetriever(embeddings)) as runtime:
+    retriever = QdrantRetriever(embedder=LangChainEmbedder(embeddings))
+    async with MCPRuntime(retriever=retriever) as runtime:
         policy = RefreshPolicy(on_register=True)
         await runtime.register_mcp("crm", crm_server(), refresh=policy)
         await runtime.register_mcp("billing", billing_server(), refresh=policy)

@@ -36,20 +36,22 @@ async def runtime():
 
 
 async def test_routes_invoice_requests(runtime: MCPRuntime) -> None:
-    [tool] = await runtime.retrieve("invoices of a customer", limit=1)
+    [tool] = await runtime.route_tools("invoices of a customer", limit=1)
     assert tool.capability_id == "billing:tool:list_invoices"
-    message = await runtime.execute(tool.capability_id, {"customer_id": "c-100"})
-    assert message.artifact["structured_content"] == {"result": ["inv-1"]}
+    result = await tool({"customer_id": "c-100"})
+    assert result.data == ["inv-1"]
 ```
 
 Async tests need an async test runner, such as `pytest-asyncio` or `anyio`.
-`KeywordRetriever`, the default retriever, is deterministic, so rankings can be
-asserted exactly.
+`QdrantRetriever`, the default retriever, ranks with BM25 in process and is
+deterministic, so rankings can be asserted exactly. To test hybrid ranking without a
+model, give it a small deterministic `Embedder` subclass, such as one that hashes
+words into a fixed-size vector.
 
 ## Inject failures
 
 To test how your application handles failures, subclass `FastMCPAdapter`, or write a
-small adapter, and raise the router's exceptions:
+small `MCPAdapter` subclass, and raise the router's exceptions:
 
 ```python
 from collections.abc import Mapping
@@ -84,7 +86,11 @@ circuits open and timeouts expire quickly.
 
 ## Test agents without a model
 
-LangChain's `GenericFakeChatModel` replies with scripted messages. Accept tools in
+In any framework, script the model's tool calls and run them as the framework would:
+`await runtime.resolve_tool(name)` finds the tool that a model called, and awaiting
+the tool with the arguments runs it through the runtime.
+
+With the `langchain` extra, LangChain's `GenericFakeChatModel` replies with scripted messages. Accept tools in
 `bind_tools`, and the agent runs its full loop, including the routing middleware and
 the tool calls through the runtime:
 
@@ -99,7 +105,8 @@ from langchain.agents import create_agent
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, ToolMessage
 
-from mcp_capability_router import CapabilityRoutingMiddleware, MCPRuntime, RefreshPolicy
+from mcp_capability_router import MCPRuntime, RefreshPolicy
+from mcp_capability_router.integrations.langchain import CapabilityRoutingMiddleware
 
 
 class ScriptedModel(GenericFakeChatModel):

@@ -5,7 +5,8 @@ the CRM server and a billing agent scoped to the billing server. Each agent's
 middleware routes only the tools of its own server, and handoff tools pass the
 conversation between them.
 
-Requires a chat model, named as for `langchain.chat_models.init_chat_model`:
+Requires the `langchain` extra and a chat model, named as for
+`langchain.chat_models.init_chat_model`:
 
     MCP_ROUTER_EXAMPLE_MODEL=openai:gpt-5.4-mini   # and OPENAI_API_KEY
 """
@@ -20,7 +21,8 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, ToolMessage
 from langgraph_swarm import create_handoff_tool, create_swarm
 
-from mcp_capability_router import CapabilityRoutingMiddleware, MCPRuntime, RefreshPolicy
+from mcp_capability_router import MCPRuntime, RefreshPolicy
+from mcp_capability_router.integrations.langchain import CapabilityRoutingMiddleware
 
 QUESTION = "Look up Acme Corp, then refund 100 of invoice inv-1."
 

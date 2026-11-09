@@ -34,8 +34,8 @@ async def main() -> None:
                 "read the text of a file", type=CapabilityType.TOOL, limit=1
             )
             print(f"selected: {match.name}")
-            message = await runtime.execute(match.capability_id, {"path": str(note)})
-            print(message.content[0]["text"])
+            result = await runtime.execute(match.capability_id, {"path": str(note)})
+            print(result.content[0].text)
 
 
 if __name__ == "__main__":

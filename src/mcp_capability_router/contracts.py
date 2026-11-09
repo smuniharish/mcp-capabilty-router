@@ -159,8 +159,8 @@ class CapabilityRegistry(ABC):
 class CapabilityRetriever(ABC):
     """Ranks candidate capabilities against a query.
 
-    `KeywordRetriever` is the default; `EmbeddingRetriever` ranks semantically, and
-    `HybridRetriever` fuses the rankings of several retrievers.
+    `QdrantRetriever` is the default. Subclass this class to rank capabilities
+    with another search engine.
     """
 
     @abstractmethod
@@ -168,6 +168,9 @@ class CapabilityRetriever(ABC):
         self, query: str, candidates: Sequence[Capability], *, limit: int
     ) -> list[Capability]:
         """Return at most `limit` of `candidates`, best match first."""
+
+    async def close(self) -> None:  # noqa: B027
+        """Release the resources of the retriever; does nothing by default."""
 
 
 type CallNext = Callable[[], Awaitable[Any]]

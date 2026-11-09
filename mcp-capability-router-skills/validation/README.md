@@ -51,7 +51,7 @@ reference. Each answer must use the public API and avoid the listed mistake.
 
 | Request | Expected route | Must avoid |
 | --- | --- | --- |
-| "Our agent has 300 MCP tools; give it only the relevant ones." | `SKILL.md` workflow, the template, and `agents.md`: `CapabilityRoutingMiddleware` | Binding every tool, or hand-written tool filtering. |
+| "Our agent has 300 MCP tools; give it only the relevant ones." | `SKILL.md` workflow, the template, and `integrations.md`: `route_tools` or `CapabilityRoutingMiddleware` | Binding every tool, or hand-written tool filtering. |
 | "Connect the GitHub and filesystem MCP servers to our LangGraph app." | `servers.md`: `register_mcp` with URLs and stdio transports | Writing an MCP client, or connecting at import time. |
 | "New tools on the plugin server should appear without a restart." | `refresh.md`: `change_events` with a FastMCP message handler, or `on_query_miss` | Restarting the process, or refreshing on every request. |
 | "The CRM server is flaky; stop hammering it when it is down." | `resilience.md`: timeout, `is_retryable` retries, circuit breakers, and health | Retry loops around `execute`, or retrying `ToolExecutionError`. |

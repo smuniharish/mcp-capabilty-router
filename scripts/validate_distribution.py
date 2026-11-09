@@ -26,14 +26,13 @@ RUNTIME_DEPENDENCIES = {
     "anyio",
     "fastmcp",
     "httpx2",
-    "langchain",
-    "langchain-core",
     "mcp",
-    "numpy",
     "purgatory",
+    "qdrant-client",
     "refresh-engine",
     "tenacity",
 }
+EXTRAS = {"all", "codemode", "langchain", "otel", "redis"}
 DEVELOPMENT_PREFIXES = ("tests/", "examples/", "scripts/", "docs/", "benchmarks/")
 # Limit warning filters to known third-party import-time checks.
 WARNING_OPTIONS = (
@@ -67,10 +66,11 @@ async def main() -> None:
         await runtime.register_mcp(
             "smoke", server, refresh=RefreshPolicy(on_register=True)
         )
-        [tool] = await runtime.retrieve("echo the text", limit=1)
-        message = await runtime.execute(tool.capability_id, {"text": "ok"})
+        [tool] = await runtime.route_tools("echo the text", limit=1)
+        result = await tool({"text": "ok"})
     assert tool.capability_id == "smoke:tool:echo", tool
-    assert message.text == "ok", message
+    assert result.data == "ok", result
+    assert "langchain_core" not in sys.modules, "the core imported LangChain"
 
 
 asyncio.run(main())
@@ -134,6 +134,9 @@ def validate_metadata(metadata: email.message.Message, version: str, requires_py
     }
     if dependencies != RUNTIME_DEPENDENCIES:
         fail(f"runtime dependencies are {sorted(dependencies)}")
+    extras = set(metadata.get_all("Provides-Extra", []))
+    if extras != EXTRAS:
+        fail(f"extras are {sorted(extras)}")
     urls = {url.split(",", 1)[0] for url in metadata.get_all("Project-URL", [])}
     if not {"Homepage", "Documentation", "Repository", "Issues", "Changelog"} <= urls:
         fail(f"project URLs are incomplete: {sorted(urls)}")

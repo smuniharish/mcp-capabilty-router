@@ -56,7 +56,7 @@ async with MCPRuntime(resilience=ResiliencePolicy(operation_timeout=30)) as runt
 
 | Call | Returns |
 | --- | --- |
-| `execute` | A LangChain `ToolMessage`: `content` blocks, `text`, and the structured content in `artifact["structured_content"]`. FastMCP wraps non-object results as `{"result": ...}`. |
+| `execute` | FastMCP `CallToolResult`: `content` blocks, `structured_content`, and the parsed `data`. FastMCP wraps non-object results as `{"result": ...}` in `structured_content`; `data` holds the value. |
 | `read_resource` | A list of `mcp.types.TextResourceContents` and `BlobResourceContents`. |
 | `get_prompt` | `mcp.types.GetPromptResult`; prompt arguments must be strings. |
 
@@ -66,7 +66,7 @@ A tool that reports an error raises `ToolExecutionError`. HTTP 401 raises
 
 ## Custom adapters
 
-Implement the `MCPAdapter` protocol (`connect`, `close`, `list_tools`,
+Subclass the `MCPAdapter` ABC (`connect`, `close`, `list_tools`,
 `list_resources`, `list_prompts`, `call_tool`, `read_resource`, `get_prompt`) with
 MCP SDK types for listings, and register a factory:
 

@@ -4,7 +4,8 @@ import asyncio
 from typing import Any
 
 import pytest
-from langchain_core.messages import ToolMessage
+from fastmcp.client.client import CallToolResult
+from mcp import types
 
 from mcp_capability_router import (
     ConfigurationError,
@@ -199,15 +200,20 @@ class TestToolResultCache:
         release.set()
         assert await leader == "done"
 
-    async def test_invalidation_and_fresh_tool_call_ids(self) -> None:
+    async def test_invalidation_and_result_copies(self) -> None:
         cache = ToolResultCache()
-        message = ToolMessage(content="ok", tool_call_id="call_1")
-        counter = Counter(message)
+        result = CallToolResult(
+            content=[types.TextContent(type="text", text="ok")],
+            structured_content={"items": [1]},
+            meta=None,
+        )
+        counter = Counter(result)
         first = await cache(call(), counter)
         second = await cache(call(), counter)
-        assert first is message
-        assert second.content == "ok"
-        assert second.tool_call_id != "call_1"
+        assert first is result
+        assert second == result
+        assert second is not result
+        assert second.structured_content is not result.structured_content
         await cache.invalidate("billing")
         await cache(call(), counter)
         assert counter.calls == 1

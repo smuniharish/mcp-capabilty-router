@@ -9,9 +9,14 @@ its capabilities, route requests to them, and hand the right tools to an agent.
 pip install mcp-capability-router
 ```
 
-The package requires Python 3.12 or newer and installs FastMCP, LangChain, and
-refresh-engine. Install the LangChain integration of your model provider, such as
-`langchain-openai` or `langchain-anthropic`, to run agents.
+The package requires Python 3.12 or newer and installs FastMCP, the Qdrant client,
+refresh-engine, and the resilience libraries. It needs no agent framework. For
+LangChain agents, install the `langchain` extra and the LangChain integration of your
+model provider:
+
+```bash
+pip install "mcp-capability-router[langchain]" langchain-openai
+```
 
 ## Create a runtime
 
@@ -71,7 +76,7 @@ query finds nothing; see [Discovery and refresh](guides/refresh.md).
 
 `retrieve` ranks the stored metadata against a request without calling any server.
 `execute` calls a tool, `read_resource` reads a resource, and `get_prompt` renders a
-prompt. This program puts it all together with an in-process server:
+prompt; `route_tools` ranks tools and returns them ready to call. This program puts it all together with an in-process server:
 
 <!-- test -->
 ```python
@@ -113,11 +118,9 @@ async def main() -> None:
         result = await runtime.refresh_server("support")
         print(f"discovered {result.added_count} capabilities")
 
-        [tool] = await runtime.retrieve(
-            "find tickets about the VPN", type=CapabilityType.TOOL, limit=1
-        )
-        message = await runtime.execute(tool.capability_id, {"text": "vpn"})
-        print(f"{tool.name}: {message.artifact['structured_content']['result']}")
+        [tool] = await runtime.route_tools("search tickets about the VPN", limit=1)
+        result = await tool({"text": "vpn"})
+        print(f"{tool.name}: {result.data}")
 
         [runbook] = await runtime.retrieve("vpn", type=CapabilityType.RESOURCE, limit=1)
         [contents] = await runtime.read_resource(runbook.capability_id)
@@ -134,13 +137,15 @@ Running the program prints:
 
 ```text
 discovered 4 capabilities
-search_tickets: ['T-2']
+support_search_tickets: ['T-2']
 vpn_runbook: Restart the VPN client, then renew the certificate.
 prompt: Write a short, friendly reply about ticket T-2.
 ```
 
-With FastMCP, `execute` returns a LangChain `ToolMessage`: its `content` holds the
-content blocks of the result and its `artifact` holds the structured content.
+Tool calls return FastMCP's `CallToolResult`: `content` holds the content blocks of
+the result, `structured_content` the structured content, and `data` the parsed value.
+Routed tools are named `<server_id>_<tool>` so that tools of different servers never
+collide.
 `read_resource` returns the MCP resource contents, and `get_prompt` returns the MCP
 prompt result. A tool that reports an error raises `ToolExecutionError`.
 
@@ -179,14 +184,18 @@ the application explicitly sets `retry_unsafe_tools=True`. See [Resilience](guid
 
 ## Give an agent routed tools
 
-`CapabilityRoutingMiddleware` turns a LangChain agent into a router: before each model
-call, it retrieves the tools that match the latest user message and adds them to the
-call. Tool calls run through the runtime:
+Each routed tool has a `name`, a `description`, and the JSON schema of its arguments
+in `input_schema`: show them to a model in any framework, and await the tool with the
+arguments the model chose. See [Agent frameworks](guides/integrations.md).
+
+With the `langchain` extra, `CapabilityRoutingMiddleware` turns a LangChain agent into
+a router: before each model call, it routes the tools that match the latest user
+message and adds them to the call. Tool calls run through the runtime:
 
 ```python
 from langchain.agents import create_agent
 
-from mcp_capability_router import CapabilityRoutingMiddleware
+from mcp_capability_router.integrations.langchain import CapabilityRoutingMiddleware
 
 agent = create_agent(
     "openai:gpt-5.4-mini",
@@ -199,9 +208,9 @@ result = await agent.ainvoke(
 )
 ```
 
-For a fixed set of tools, such as in a LangGraph workflow, `as_tool` returns a
-LangChain tool for one capability. See
-[LangChain and LangGraph agents](guides/agents.md).
+For a fixed set of tools, such as in a LangGraph workflow, `to_langchain_tool` turns
+a routed tool into a LangChain tool. To give the router to any MCP client instead,
+serve it as an [MCP gateway](guides/gateway.md).
 
 ## Next steps
 

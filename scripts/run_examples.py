@@ -31,6 +31,10 @@ REQUIRES = {
     "13_postgres_registry.py": "MCP_ROUTER_EXAMPLE_POSTGRES_DSN",
     "14_stdio_servers.py": "MCP_ROUTER_EXAMPLE_NODE",
     "17_redis_shared_state.py": "MCP_ROUTER_EXAMPLE_REDIS_URL",
+    "18_qdrant_server.py": "MCP_ROUTER_EXAMPLE_QDRANT_URL",
+    "22_any_framework.py": "MCP_ROUTER_EXAMPLE_OPENAI_MODEL",
+    "23_gateway_agent.py": "MCP_ROUTER_EXAMPLE_MODEL",
+    "24_browser_automation.py": "MCP_ROUTER_EXAMPLE_BROWSER",
 }
 VARIABLE_OUTPUT = {
     "08_semantic_retrieval.py",
@@ -38,7 +42,10 @@ VARIABLE_OUTPUT = {
     "11_deep_agent.py",
     "12_agent_swarm.py",
     "14_stdio_servers.py",
-    "18_hybrid_retrieval.py",
+    "18_qdrant_server.py",
+    "22_any_framework.py",
+    "23_gateway_agent.py",
+    "24_browser_automation.py",
 }
 # Limit warning filters to known third-party import-time checks.
 WARNING_OPTIONS = (

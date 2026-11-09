@@ -1,6 +1,6 @@
 [project]
 site_name = "mcp-capability-router"
-site_description = "Async capability routing for MCP tools, resources, and prompts."
+site_description = "Async, framework-agnostic capability routing for MCP tools, resources, and prompts."
 site_url = "https://mcp-capabilty-router.readthedocs.io/en/latest/"
 site_author = "S. Muni Harish"
 repo_name = "smuniharish/mcp-capabilty-router"
@@ -19,7 +19,8 @@ nav = [
     { "Discovery and refresh" = "guides/refresh.md" },
     { "Resilience" = "guides/resilience.md" },
     { "Metrics, logging, and health" = "guides/observability.md" },
-    { "LangChain and LangGraph agents" = "guides/agents.md" },
+    { "Agent frameworks" = "guides/integrations.md" },
+    { "MCP gateway" = "guides/gateway.md" },
     { "Extending the router" = "guides/extending.md" },
     { "Downstream customization" = "guides/customization.md" },
     { "Isolation and security" = "guides/security.md" },
@@ -37,7 +38,8 @@ nav = [
     { "Retrieval" = "api/retrieval.md" },
     { "Registries" = "api/registry.md" },
     { "FastMCP adapter" = "api/adapters.md" },
-    { "Agent middleware" = "api/agents.md" },
+    { "Gateway" = "api/gateway.md" },
+    { "Integrations" = "api/integrations.md" },
     { "Extension contracts" = "api/contracts.md" },
     { "Resilience" = "api/resilience.md" },
     { "Caching, tracing, and testing" = "api/extensions.md" },

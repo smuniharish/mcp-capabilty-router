@@ -5,7 +5,7 @@ build-backend = "uv_build"
 [project]
 name = "mcp-capability-router"
 version = "1.0.0"
-description = "Asyncio-first capability routing for MCP tools, resources, and prompts in LangChain and LangGraph agents."
+description = "Framework-agnostic, asyncio-first capability routing for MCP tools, resources, and prompts."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "Apache-2.0"
@@ -16,11 +16,13 @@ authors = [
 keywords = [
   "agents",
   "asyncio",
+  "code-mode",
   "fastmcp",
+  "hybrid-search",
   "langchain",
-  "langgraph",
   "mcp",
   "model-context-protocol",
+  "qdrant",
   "resilience",
   "routing",
   "tool-retrieval",
@@ -45,23 +47,26 @@ dependencies = [
   "anyio>=4.16.0,<5",
   "fastmcp>=4.1.6,<5",
   "httpx2>=2.16.0,<3",
-  "langchain[mcp]>=1.4.9,<2",
-  "langchain-core>=1.7.6,<2",
   "mcp>=2.3.0,<3",
-  "numpy>=2.5.4,<3",
   "purgatory>=3.0.1,<4",
+  "qdrant-client>=1.20.0,<2",
   "refresh-engine>=1.0.0,<2",
   "tenacity>=9.2.1,<10",
 ]
 
 [project.optional-dependencies]
+langchain = [
+  "langchain>=1.4.9,<2",
+  "langchain-core>=1.7.6,<2",
+]
+codemode = ["fastmcp[code-mode]>=4.1.6,<5"]
 otel = [
   "opentelemetry-api>=1.45.2,<2",
   "opentelemetry-sdk>=1.45.2,<2",
   "refresh-engine[otel]>=1.0.0,<2",
 ]
 redis = ["purgatory[redis]>=3.0.1,<4"]
-all = ["mcp-capability-router[otel,redis]"]
+all = ["mcp-capability-router[codemode,langchain,otel,redis]"]
 
 [project.urls]
 Homepage = "https://github.com/smuniharish/mcp-capabilty-router"
@@ -93,6 +98,7 @@ examples = [
   "langchain-openai>=1.7.4,<2",
   "langgraph>=1.2.20,<2",
   "langgraph-swarm>=0.1.0,<1",
+  "openai>=3.46.0,<4",
   "opentelemetry-exporter-otlp-proto-grpc>=1.45.2,<2",
   "prometheus-client>=0.26.0,<1",
 ]

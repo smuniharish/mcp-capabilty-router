@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import hashlib
 import json
 import time
-import uuid
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any
 
-from langchain_core.messages import ToolMessage
+from fastmcp.client.client import CallToolResult
 
 from .contracts import CallNext, Interceptor, Operation, OperationContext
 from .errors import ConfigurationError
@@ -103,8 +103,8 @@ class ToolResultCache(Interceptor):
     tools whose server marks them `readOnlyHint`, and its arguments serialize to
     JSON. Identical calls, the same tool and the same arguments, return the cached
     result until it expires; concurrent identical calls share one server call.
-    Errors and `None` results are not cached. A cached `ToolMessage` is returned
-    with a new `tool_call_id`.
+    Errors and `None` results are not cached. Every caller receives its own copy
+    of a cached `CallToolResult`, so changing one never changes the cache.
 
     Add it to the runtime's interceptors; it runs before the circuit breaker, so a
     cached result is returned even while the server is unavailable.
@@ -189,7 +189,7 @@ class ToolResultCache(Interceptor):
         else:
             future.set_result(result)
             if result is not None:
-                await self._store.set(key, result, self._ttl)
+                await self._store.set(key, _fresh(result), self._ttl)
             return result
         finally:
             del self._pending[key]
@@ -213,6 +213,6 @@ class ToolResultCache(Interceptor):
 
 
 def _fresh(result: Any) -> Any:
-    if isinstance(result, ToolMessage):
-        return result.model_copy(update={"tool_call_id": f"call_{uuid.uuid4().hex}"})
+    if isinstance(result, CallToolResult):
+        return copy.deepcopy(result)
     return result

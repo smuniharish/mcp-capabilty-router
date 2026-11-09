@@ -37,25 +37,28 @@ Subclass `CapabilityRetriever` and implement
 best first, and only records from the supplied candidates. Candidates are already
 filtered by server, type, predicate, and health.
 
-For weighted fusion, use the built-in implementation:
+For hybrid ranking, use the built-in implementation: `QdrantRetriever` fuses BM25 and
+dense rankings in Qdrant. To rank with another embedding model or service, subclass
+`Embedder` instead of `CapabilityRetriever`:
 
 ```python
-from mcp_capability_router import (
-    EmbeddingRetriever,
-    HybridRetriever,
-    KeywordRetriever,
-    MCPRuntime,
-)
+from mcp_capability_router import Embedder, MCPRuntime, QdrantRetriever
 
-retriever = HybridRetriever(
-    [KeywordRetriever(), EmbeddingRetriever(embeddings)],
-    weights=[1, 2],
-    fetch_k=50,
-)
-runtime = MCPRuntime(retriever=retriever)
+
+class ServiceEmbedder(Embedder):
+    async def embed_documents(self, texts):
+        return await embedding_service.embed(list(texts))
+
+    async def embed_query(self, text):
+        [vector] = await embedding_service.embed([text])
+        return vector
+
+
+runtime = MCPRuntime(retriever=QdrantRetriever(embedder=ServiceEmbedder(), fusion="dbsf"))
 ```
 
-See [Retrieval](retrieval.md) for vector-store and reranker customization.
+See [Retrieval](retrieval.md) for Qdrant servers, LangChain vector stores, and
+rerankers.
 
 ## Adapters
 

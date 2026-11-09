@@ -19,7 +19,6 @@ from refresh_engine import (
 )
 
 from mcp_capability_router import (
-    CapabilityRoutingMiddleware,
     ConfigurationError,
     FastMCPAdapter,
     HealthState,
@@ -202,7 +201,7 @@ class TestRegisterMcp:
         async with MCPRuntime() as runtime:
             await runtime.register_mcp("demo", demo_server(), refresh=ON_REGISTER, timeout=5)
             result = await runtime.execute("demo:tool:add", {"a": 2, "b": 3})
-            assert result.artifact == {"structured_content": {"result": 5}}
+            assert result.structured_content == {"result": 5}
 
     async def test_client_options_need_a_target_not_a_client(self) -> None:
         async with MCPRuntime() as runtime:
@@ -214,11 +213,6 @@ class TestEdges:
     def test_adapters_reject_options_for_prebuilt_clients(self) -> None:
         with pytest.raises(ConfigurationError, match=r"prebuilt fastmcp\.Client"):
             FastMCPAdapter(Client(demo_server()), timeout=5)
-
-    async def test_middleware_filters_must_be_callable(self) -> None:
-        async with MCPRuntime() as runtime:
-            with pytest.raises(ConfigurationError, match="where"):
-                CapabilityRoutingMiddleware(runtime, where=42)  # type: ignore[arg-type]
 
     def test_tool_hints(self) -> None:
         plain = Tool(capability_id="s:tool:t", server_id="s", name="t")

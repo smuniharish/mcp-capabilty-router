@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from hypothesis import given
 from hypothesis import strategies as st
 
-from mcp_capability_router import KeywordRetriever, Tool
+from mcp_capability_router import QdrantRetriever, Tool
 from mcp_capability_router.retrieval import _words
 
 if TYPE_CHECKING:
@@ -42,8 +42,15 @@ def catalogs(draw: st.DrawFn) -> list[Tool]:
 
 
 def retrieve(query: str, candidates: list[Tool], limit: int) -> list[str]:
-    ranked = asyncio.run(KeywordRetriever().retrieve(query, candidates, limit=limit))
-    return [capability.capability_id for capability in ranked]
+    async def run() -> list[str]:
+        retriever = QdrantRetriever()
+        try:
+            ranked = await retriever.retrieve(query, candidates, limit=limit)
+        finally:
+            await retriever.close()
+        return [capability.capability_id for capability in ranked]
+
+    return asyncio.run(run())
 
 
 @given(st.text(max_size=60))

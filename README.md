@@ -12,11 +12,11 @@
 servers, through one resilient runtime.**
 
 mcp-capability-router is an asyncio-first Python library that sits between your
-LangChain or LangGraph agents and your MCP servers. It discovers what each server
-offers, keeps that catalog current, ranks it against each request, and runs every
-server operation through concurrency limits, circuit breakers, retries, rate limits,
-and timeouts. An agent sees only the few tools that matter for the current turn,
-however many servers and tools you register.
+agents and your MCP servers, whatever framework the agents use. It discovers what
+each server offers, keeps that catalog current, ranks it against each request, and
+runs every server operation through concurrency limits, circuit breakers, retries,
+rate limits, and timeouts. An agent sees only the few tools that matter for the
+current turn, however many servers and tools you register.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/smuniharish/mcp-capabilty-router/HEAD/docs/assets/diagrams/architecture-dark.png">
@@ -27,8 +27,8 @@ however many servers and tools you register.
 
 - **Only the relevant tools.** Retrieval selects the capabilities that match each
   request, so models stay fast, inexpensive, and accurate with thousands of tools.
-  Keyword retrieval needs no model; embedding retrieval works with any LangChain
-  embedding model and reranker.
+  [Qdrant](https://qdrant.tech) ranks with BM25 out of the box, with no model and no
+  service, and fuses BM25 with any embedding model for hybrid ranking.
 - **Every MCP server.** Streamable HTTP, SSE, stdio, MCP configurations, and
   in-process servers through [FastMCP](https://gofastmcp.com), with lazy connections
   and automatic reconnection.
@@ -41,16 +41,21 @@ however many servers and tools you register.
   [tenacity](https://tenacity.readthedocs.io), and
   [aiolimiter](https://aiolimiter.readthedocs.io). Failures are classified, so a
   rejected tool call is never repeated and never opens a circuit.
-- **Built for LangChain.** Agent middleware for `create_agent`, Deep Agents, and
-  multi-agent systems, LangChain tools for LangGraph, and compatibility with
-  LangChain's human-in-the-loop middleware.
+- **Any agent framework.** `route_tools` returns ready-to-call tools with a name, a
+  description, and a JSON schema, for the OpenAI SDK, Agno, CrewAI, or any other
+  framework. The `langchain` extra adds routing middleware for `create_agent`, Deep
+  Agents, and multi-agent systems, and LangChain tools for LangGraph.
+- **An MCP gateway.** `as_mcp_server` serves every registered server as one MCP
+  server, with tool search, a full catalog, or an experimental code mode, so any MCP
+  client gets routing and resilience.
 - **Isolated and observable.** One runtime per tenant shares nothing with others.
   Health states, metrics for every operation, and standard logging.
 - **Typed and extensible.** Fully type-annotated ABCs for registries, retrievers,
   adapters, and interceptors, with reusable conformance tests.
 - **Application-owned infrastructure.** Supply refresh StateStores, event publishers,
-  fingerprints, FastMCP clients, vector stores, or result-cache stores. Fuse keyword
-  and semantic rankings, share circuits in Redis, and export OpenTelemetry spans.
+  fingerprints, FastMCP clients, Qdrant clients, embedders, or result-cache stores.
+  Share the index in a Qdrant server, share circuits in Redis, and export
+  OpenTelemetry spans.
 
 ## Installation
 
@@ -60,8 +65,10 @@ mcp-capability-router requires Python 3.12 or newer.
 pip install mcp-capability-router
 ```
 
-Use `pip install "mcp-capability-router[otel,redis]"` for OpenTelemetry and Redis
-circuit storage. Configure resilience with `MCPRuntime(resilience=ResiliencePolicy(...))`;
+Extras add optional integrations: `langchain` for LangChain, LangGraph, and Deep
+Agents, `codemode` for the gateway's code mode, `otel` for OpenTelemetry, `redis` for
+Redis circuit storage, and `all` for every one of them, such as
+`pip install "mcp-capability-router[langchain,otel]"`. Configure resilience with `MCPRuntime(resilience=ResiliencePolicy(...))`;
 individual registrations can supply their own policy.
 
 ## Quick start
@@ -95,11 +102,11 @@ def list_alerts(region: str) -> list[str]:
 async def main() -> None:
     async with MCPRuntime() as runtime:
         await runtime.register_mcp("weather", weather, refresh=RefreshPolicy(on_register=True))
-        [tool] = await runtime.retrieve("What is the forecast for Paris?", limit=1)
+        [tool] = await runtime.route_tools("What is the forecast for Paris?", limit=1)
         print(tool.capability_id)
 
-        message = await runtime.execute(tool.capability_id, {"city": "Paris"})
-        print(message.text)
+        result = await tool({"city": "Paris"})
+        print(result.data)
 
 
 asyncio.run(main())
@@ -115,13 +122,15 @@ the same way.
 
 ## Route tools for an agent
 
-Add the middleware to a LangChain agent, and every model call receives the tools that
-match the latest user message. Tool calls run through the runtime:
+`route_tools` gives any framework the tools that match a request: each has a
+`name`, a `description`, and an `input_schema`, and awaiting it runs the MCP tool
+through the runtime. With the `langchain` extra, add the middleware to a LangChain
+agent, and every model call receives the tools that match the latest user message:
 
 ```python
 from langchain.agents import create_agent
 
-from mcp_capability_router import CapabilityRoutingMiddleware
+from mcp_capability_router.integrations.langchain import CapabilityRoutingMiddleware
 
 agent = create_agent(
     "openai:gpt-5.4-mini",
@@ -133,14 +142,15 @@ result = await agent.ainvoke(
 )
 ```
 
-Continue with the
+To serve the router to any MCP client, such as an IDE or a desktop assistant, run
+`runtime.as_mcp_server("gateway")` over Streamable HTTP. Continue with the
 [getting started guide](https://mcp-capabilty-router.readthedocs.io/en/latest/getting-started/)
 to add resilience, refresh policies, and observability.
 
 ## Performance
 
-The router's overhead is small next to real MCP calls: keyword retrieval ranks 10,000
-capabilities in about 10 milliseconds, and an operation passes through the whole
+The router's overhead is small next to real MCP calls: in-process BM25 ranks 1,000
+capabilities in a few milliseconds, and an operation passes through the whole
 resilience pipeline in a few microseconds. See
 [Performance](https://mcp-capabilty-router.readthedocs.io/en/latest/guides/performance/)
 for the measurements and tuning advice.
@@ -155,7 +165,7 @@ The [documentation](https://mcp-capabilty-router.readthedocs.io/en/latest/) cove
   feature, including a
   [production checklist](https://mcp-capabilty-router.readthedocs.io/en/latest/guides/production/)
 - [Runnable examples](https://mcp-capabilty-router.readthedocs.io/en/latest/examples/),
-  from a quick start to LangGraph workflows, Deep Agents, and PostgreSQL registries
+  from a quick start to any framework, the MCP gateway, Deep Agents, and Qdrant
 - The [API reference](https://mcp-capabilty-router.readthedocs.io/en/latest/api/)
 - The [architecture](https://mcp-capabilty-router.readthedocs.io/en/latest/architecture/overview/)
   and its guarantees

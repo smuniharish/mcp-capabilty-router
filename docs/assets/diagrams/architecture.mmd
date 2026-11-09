@@ -1,9 +1,9 @@
 flowchart TB
     subgraph application["Your application"]
         direction LR
-        agents["<b>LangChain agents</b><br/>CapabilityRoutingMiddleware<br/>create_agent · Deep Agents"]
-        workflows["<b>LangGraph workflows</b><br/>retrieve · execute<br/>read_resource · get_prompt"]
-        code["<b>Application code</b><br/>register · refresh<br/>health · close"]
+        agents["<b>Agent frameworks</b><br/>route_tools · RoutedTool<br/>LangChain integration"]
+        workflows["<b>MCP clients</b><br/>as_mcp_server gateway<br/>search · catalog · code"]
+        code["<b>Application code</b><br/>query · execute<br/>read_resource · get_prompt"]
             agents ~~~ workflows ~~~ code
         end
 
@@ -11,7 +11,7 @@ flowchart TB
         direction LR
         refresh["<b>Discovery and refresh</b><br/>a refresh-engine per server<br/>policies · fingerprints"]
         registry["<b>CapabilityRegistry</b><br/>tool, resource, and<br/>prompt metadata"]
-        retriever["<b>CapabilityRetriever</b><br/>keywords or embeddings"]
+        retriever["<b>QdrantRetriever</b><br/>BM25 · dense · hybrid"]
         pipeline["<b>Resilience pipeline</b><br/>concurrency · interceptors · breaker<br/>retry · rate limit · timeout"]
         refresh -- reconciles --> registry
         retriever -- ranks --> registry

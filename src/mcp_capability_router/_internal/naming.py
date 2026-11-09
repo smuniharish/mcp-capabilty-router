@@ -1,4 +1,4 @@
-"""Validation of server IDs and limits, and qualified tool names."""
+"""Validation of server IDs, limits, and counts, and qualified tool names."""
 
 from __future__ import annotations
 
@@ -38,10 +38,19 @@ def validate_limit(limit: object) -> int:
     Raises:
         ConfigurationError: If `limit` is not a positive integer.
     """
-    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
-        msg = f"limit must be a positive integer, got {limit!r}"
+    return validate_positive("limit", limit)
+
+
+def validate_positive(name: str, value: object) -> int:
+    """Return `value` if it is a positive integer.
+
+    Raises:
+        ConfigurationError: If `value` is not a positive integer.
+    """
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        msg = f"{name} must be a positive integer, got {value!r}"
         raise ConfigurationError(msg)
-    return limit
+    return value
 
 
 def qualified_tool_name(server_id: str, name: str) -> str:

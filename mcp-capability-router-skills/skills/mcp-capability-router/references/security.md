@@ -7,8 +7,11 @@
   none of them.
 - Sharing is explicit: a durable registry or a shared circuit-breaker factory passed
   to several runtimes. Share only within one trust boundary.
-- Scope agents to the servers they need with
-  `CapabilityRoutingMiddleware(runtime, server_id=...)`.
+- Scope agents to the servers they need with `route_tools(..., server_id=...)`,
+  or `CapabilityRoutingMiddleware(runtime, server_id=...)` from
+  `mcp_capability_router.integrations.langchain`.
+- A gateway from `as_mcp_server` can call every registered tool: serve it over
+  HTTP only behind authentication.
 
 ## Credentials
 
@@ -29,17 +32,16 @@ await runtime.register_server("crm", crm_adapter)
 
 ## Restrict tools
 
-Annotations are in `capability.metadata["annotations"]` with snake_case keys, such as
-`read_only_hint` and `destructive_hint`. Enforce policy in an interceptor so that it
-applies to every caller:
+Tools expose their annotations as `read_only`, `destructive`, `idempotent`, and
+`open_world`. Enforce policy in an interceptor so that it applies to every caller,
+including the gateway:
 
 ```python
 async def read_only(context: OperationContext, call_next: Callable[[], Awaitable[Any]]) -> Any:
     capability = context.capability
-    if context.operation is Operation.CALL_TOOL and capability is not None:
-        if not capability.metadata.get("annotations", {}).get("read_only_hint"):
-            msg = f"{capability.capability_id} may change data"
-            raise AuthorizationError(msg)
+    if isinstance(capability, Tool) and not capability.read_only:
+        msg = f"{capability.capability_id} may change data"
+        raise AuthorizationError(msg)
     return await call_next()
 ```
 

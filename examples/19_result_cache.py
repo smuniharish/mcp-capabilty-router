@@ -31,7 +31,8 @@ async def main() -> None:
         results = await asyncio.gather(
             *(runtime.execute("inventory:tool:stock", {"sku": "A1"}) for _ in range(10))
         )
-        assert len({message.tool_call_id for message in results}) == 10
+        assert len({id(result) for result in results}) == 10
+        assert all(result.data == "A1: 42" for result in results)
         print(f"10 concurrent calls: {calls} server call, {len(store)} cached result")
         await runtime.execute("inventory:tool:stock", {"sku": "A1"})
         print(f"cached call: still {calls} server call")

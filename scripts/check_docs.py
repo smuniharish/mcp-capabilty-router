@@ -41,6 +41,7 @@ from typing import TYPE_CHECKING
 from urllib.parse import unquote, urlsplit
 
 import mcp_capability_router
+from mcp_capability_router.integrations import langchain as langchain_integration
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -67,6 +68,7 @@ CONTRIBUTOR_DOCUMENTS = frozenset(
 )
 PUBLIC = frozenset(mcp_capability_router.__all__) | {"__version__"}
 PUBLIC_MODULES = {
+    "mcp_capability_router.integrations.langchain": frozenset(langchain_integration.__all__),
     "mcp_capability_router.otel": frozenset({"OpenTelemetryInterceptor"}),
     "mcp_capability_router.testing": frozenset(
         {
@@ -372,7 +374,7 @@ def imported_names(tree: ast.AST) -> Iterator[tuple[int, str]]:
             isinstance(node, ast.Attribute)
             and isinstance(node.value, ast.Name)
             and node.value.id == "mcp_capability_router"
-            and node.attr not in PUBLIC | {"otel", "testing"}
+            and node.attr not in PUBLIC | {"integrations", "otel", "testing"}
         ):
             yield node.lineno, f"uses non-public name mcp_capability_router.{node.attr}"
 
@@ -478,6 +480,13 @@ def check_consistency(report: Report) -> None:
             )
     for name in sorted(set(documented) - PUBLIC):
         report.problems.append(f"docs/api: mcp_capability_router.{name} is not public")
+    api_text = "\n".join(page.read_text(encoding="utf-8") for page in (DOCS / "api").glob("*.md"))
+    for module, names in PUBLIC_MODULES.items():
+        if module.startswith("mcp_capability_router.integrations."):
+            for name in sorted(names):
+                count = len(re.findall(rf"(?m)^::: {re.escape(module)}\.{name}\s*$", api_text))
+                if count != 1:
+                    report.problems.append(f"docs/api: {module}.{name} is documented {count} times")
     version = mcp_capability_router.__version__
     skill = ROOT / SKILL
     if skill.exists():

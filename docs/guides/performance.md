@@ -12,32 +12,35 @@ benchmarks on your own hardware with `python benchmarks/bench_retrieval.py` and
 
 ### Retrieval
 
-Median latency of one query over a catalog of tools:
+Median latency of one query with `QdrantRetriever` and an in-process Qdrant index:
 
-| Capabilities | `KeywordRetriever` | `EmbeddingRetriever` |
+| Capabilities | BM25 (`mode="sparse"`) | Hybrid (`mode="hybrid"`) |
 | ---: | ---: | ---: |
-| 100 | 0.09 ms | 1.5 ms |
-| 1,000 | 0.9 ms | 8.4 ms |
-| 10,000 | 10 ms | 73 ms |
-| 100,000 | 195 ms | — |
+| 100 | 0.8 ms | 1.0 ms |
+| 1,000 | 7.5 ms | 6.0 ms |
+| 10,000 | 74 ms | 56 ms |
 
-The embedding benchmark uses a hash function instead of a model, so it measures the
-vector search; a real embedding model adds one embedding call per query.
+The first query over 10,000 capabilities also indexes them, which takes about
+0.7 s for BM25 and 0.85 s for hybrid ranking. Later queries index only the
+capabilities that changed. The hybrid benchmark uses a hash `Embedder` instead of a
+model, so it measures the search; a real embedding model adds one embedding call per
+query, and one per new or changed capability.
 
 ### Refresh and execution
 
 | Measurement | 1,000 tools | 10,000 tools |
 | --- | ---: | ---: |
-| First refresh | 32 ms | 422 ms |
-| Refresh with nothing changed | 33 ms | 289 ms |
-| `execute` through the full pipeline, median | 6 µs | 5 µs |
+| First refresh | 111 ms | 250 ms |
+| Refresh with nothing changed | 19 ms | 324 ms |
+| `execute` through the full pipeline, median | 5 ?s | 4 ?s |
 
 ## Tuning advice
 
 **Narrow the candidates.** Retrieval time grows linearly with the number of
 candidates. Pass `type` and `server_id` when you know them, and scope agents to the
-servers they need. Keyword indexes are cached per capability and rebuilt only when a
-capability changes.
+servers they need. `QdrantRetriever` indexes each capability once and again only
+when its text changes. For large catalogs, point it at a Qdrant server, which filters
+by server and type inside the index.
 
 **Prefer change notifications to short intervals.** Every refresh lists the whole
 server, even when nothing changed. Refresh on `list_changed` notifications or on query
@@ -54,9 +57,11 @@ limit them separately with an interceptor.
 **Set timeouts.** A server that stops answering holds a concurrency slot until the
 operation times out. `operation_timeout` frees it.
 
-**Embed once.** `EmbeddingRetriever` embeds each capability once and again only when
-its text changes. Keep one retriever per runtime, and size `max_documents` to your
-catalog, so that vectors are not evicted and embedded again.
+**Embed once.** In hybrid mode, `QdrantRetriever` embeds each capability once and
+again only when its text changes. Keep one retriever per runtime, and size
+`max_points` to your catalog, so that capabilities are not evicted and embedded
+again.
 
-**Cold start.** Importing the package does not import FastMCP, the MCP SDK, or
-`langchain.mcp`; they are loaded when the first server is used.
+**Cold start.** Importing the package does not import LangChain or the Qdrant client;
+the Qdrant client is loaded with the first query, and LangChain only through
+`mcp_capability_router.integrations.langchain`.

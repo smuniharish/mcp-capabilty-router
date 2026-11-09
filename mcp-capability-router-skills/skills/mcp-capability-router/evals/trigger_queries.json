@@ -11,7 +11,7 @@
     {"query": "Write an unrelated database schema migration.", "should_trigger": false, "split": "train"},
     {"query": "Call one fixed MCP tool using a plain client.", "should_trigger": false, "split": "train"},
     {"query": "Optimize an image classifier.", "should_trigger": false, "split": "train"},
-    {"query": "Configure HybridRetriever for my router application.", "should_trigger": true, "split": "validation"},
+    {"query": "Configure hybrid QdrantRetriever ranking for my router application.", "should_trigger": true, "split": "validation"},
     {"query": "Why does mcp-capability-router retrieve no tools?", "should_trigger": true, "split": "validation"},
     {"query": "Isolate tenants using separate MCPRuntime lifespans.", "should_trigger": true, "split": "validation"},
     {"query": "Implement a new MCPAdapter for an internal service.", "should_trigger": false, "split": "validation"},

@@ -10,24 +10,35 @@ All notable changes are recorded here using
 
 ### Added
 
+- A framework-agnostic core: `route_tools` returns awaitable `RoutedTool` objects
+  with JSON schemas for any agent framework or application, and `resolve_tool` finds
+  the tool that a model called.
+- The LangChain and LangGraph integration in
+  `mcp_capability_router.integrations.langchain`, through the `langchain` extra:
+  routing middleware, LangChain tools, and embeddings for hybrid ranking.
+- `QdrantRetriever`, the default retriever: in-process or server Qdrant with BM25,
+  dense, and hybrid ranking with reciprocal rank or distribution-based fusion, and an
+  `Embedder` ABC for any embedding model. `VectorStoreRetriever` accepts any
+  LangChain vector store.
+- An MCP gateway: `as_mcp_server` serves every registered server as one FastMCP
+  server, in search, catalog, or code mode (through the `codemode` extra).
+- FastMCP as the MCP client, with every client option, such as authentication,
+  sampling, elicitation, roots, and progress handlers, and application-owned clients.
 - Python 3.12 through 3.15 support, uv_build packaging, and Pyrefly type checking.
 - ABC contracts for adapters, registries, retrievers, interceptors, and cache stores,
   with reusable async conformance suites in `mcp_capability_router.testing`.
 - Refresh-engine 1.0 integration: policy-owned StateStores, per-server store factories,
   application-owned event publishers, async handlers and metrics, and fingerprints.
-- FastMCP client options for authentication, sampling, elicitation, roots, and
-  progress handlers, with support for application-owned clients.
-- LangChain vector-store injection and weighted hybrid retrieval with reciprocal
-  rank fusion.
 - Runtime-wide and per-server `ResiliencePolicy`, per-server concurrency limits,
   safe-tool retry gating, and unhealthy-server exclusion with an explicit override.
 - Read-only result caching with TTL, bounded LRU storage, single-flight requests,
   per-server invalidation, and a replaceable `ResultCacheStore`.
 - OpenTelemetry MCP client spans and refresh-engine metrics through the `otel`
   extra; shared purgatory circuit state through the `redis` extra.
-- SQLite and PostgreSQL durable registry and StateStore examples, Redis sharing,
-  OTLP export, hybrid retrieval, and cache examples.
-- Zensical documentation, current dependency groups, expanded CI, and two
+- Examples for SQLite and PostgreSQL durable registries and StateStores, Redis
+  sharing, OTLP export, Qdrant servers, hybrid retrieval, caching, the gateway, and
+  LangChain and OpenAI SDK agents.
+- Zensical documentation, current dependency groups, a core-only CI job, and two
   versioned Agent Skills with executable templates and evaluation cases.
 
 ## [0.2.0] - 2026-10-05

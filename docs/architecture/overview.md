@@ -72,8 +72,9 @@ model and no randomness, so routing can be tested exactly and explained.
    fully closed.
 6. Every background task and connection has an owner and stops when its server is
    unregistered or its runtime closes; a closed server is never reconnected.
-7. Tool arguments reach the server unchanged, and routed tool failures and timeouts
-   reach the model as error messages instead of aborting the agent run.
+7. Tool arguments reach the server unchanged. In the LangChain integration, routed
+   tool failures and timeouts reach the model as error messages instead of aborting
+   the agent run.
 
 These guarantees are verified by unit, integration, and property-based tests,
 including a stateful test that compares the registry with an independent model across
@@ -83,9 +84,9 @@ re-registrations, and leftovers of earlier registrations.
 
 ## Complexity
 
-For *N* candidate capabilities and *T* query words, keyword retrieval takes *O(N·T)*
-time per query; each capability's index is built once and reused until the
-capability changes. Discovery and change detection take *O(N)* time per server.
+`QdrantRetriever` indexes each capability once and again only when its text
+changes, and searches its BM25 and dense vectors with Qdrant's inverted and HNSW
+indexes, filtering by server and type inside the index. Discovery and change detection take *O(N)* time per server.
 Executing an operation adds constant overhead to the server call.
 
 See [Request lifecycle](lifecycle.md) for the steps of each operation.

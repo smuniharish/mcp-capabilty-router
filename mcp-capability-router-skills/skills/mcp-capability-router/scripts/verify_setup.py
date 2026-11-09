@@ -22,9 +22,9 @@ async def verify() -> dict[str, object]:
 
     async with MCPRuntime(resilience=ResiliencePolicy(operation_timeout=10)) as runtime:
         await runtime.register_mcp("setup", server, refresh=RefreshPolicy(on_register=True))
-        [tool] = await runtime.retrieve("echo text", limit=1)
-        result = await runtime.execute(tool.capability_id, {"text": "ready"})
-        if result.text != "ready":
+        [tool] = await runtime.route_tools("echo text", limit=1)
+        result = await tool({"text": "ready"})
+        if result.data != "ready":
             msg = f"unexpected tool result: {result!r}"
             raise RuntimeError(msg)
     return {

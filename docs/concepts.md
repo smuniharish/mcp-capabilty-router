@@ -64,13 +64,23 @@ notification arrives. Without a policy, the application refreshes servers explic
 ## Retrieval
 
 A **retriever** ranks capabilities against a request. Retrieval reads the registry
-only; it never calls a server. `KeywordRetriever`, the default, matches words and
-identifiers deterministically and needs no model. `EmbeddingRetriever` ranks by
-semantic similarity with any LangChain embedding model.
+only; it never calls a server. `QdrantRetriever`, the default, ranks with BM25 in an
+in-process Qdrant collection: deterministically, with no model and no service. Give
+it an `Embedder` to rank by meaning as well, and an `AsyncQdrantClient` to share the
+index through a Qdrant server.
 
 `MCPRuntime.retrieve` ranks the capabilities that are already known.
 `MCPRuntime.query` refreshes the servers that allow it when nothing matches, then
-ranks again.
+ranks again. `MCPRuntime.route_tools` queries tools and returns them as `RoutedTool`s,
+ready for any agent framework to show a model and to call.
+
+## Integrations and the gateway
+
+The core needs no agent framework. Framework integrations, such as the LangChain
+routing middleware, live in `mcp_capability_router.integrations.<framework>` behind an
+extra of the same name. `MCPRuntime.as_mcp_server` serves the router itself as an MCP
+server, so any MCP client reaches every registered server through the runtime. See
+[Agent frameworks](guides/integrations.md) and [MCP gateway](guides/gateway.md).
 
 ## Operations and the resilience pipeline
 

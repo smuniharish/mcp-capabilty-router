@@ -14,7 +14,7 @@
     {"query": "Implement a partitioned StateStore for MCPRuntime replicas.", "should_trigger": true, "split": "validation"},
     {"query": "Build a custom ranking backend subclassing CapabilityRetriever.", "should_trigger": true, "split": "validation"},
     {"query": "Implement an async audit Interceptor subclass for the router.", "should_trigger": true, "split": "validation"},
-    {"query": "Configure HybridRetriever for my router application.", "should_trigger": false, "split": "validation"},
+    {"query": "Configure hybrid QdrantRetriever ranking for my router application.", "should_trigger": false, "split": "validation"},
     {"query": "Trace routed MCP operations with OpenTelemetry.", "should_trigger": false, "split": "validation"},
     {"query": "Call one fixed MCP tool using a plain client.", "should_trigger": false, "split": "validation"}
   ]

@@ -1,15 +1,15 @@
-"""Asyncio-first capability routing for MCP tools, resources, and prompts.
+"""Framework-agnostic, asyncio-first capability routing for MCP tools, resources, and prompts.
 
-Every public name is importable from this package, except the OpenTelemetry
-interceptor in `mcp_capability_router.otel`, which needs the `otel` extra, and the
-conformance tests in `mcp_capability_router.testing`.
+Every public name of the core is importable from this package. The OpenTelemetry
+interceptor lives in `mcp_capability_router.otel` (the `otel` extra), framework
+integrations in `mcp_capability_router.integrations` (for example the `langchain`
+extra), and the conformance tests in `mcp_capability_router.testing`.
 """
 
 import logging
 from importlib.metadata import PackageNotFoundError, version
 
 from .adapters import FastMCPAdapter, FastMCPTarget
-from .agents import CapabilityRoutingMiddleware
 from .contracts import (
     AdapterFactory,
     CallNext,
@@ -44,6 +44,7 @@ from .errors import (
     ServerUnavailableError,
     ToolExecutionError,
 )
+from .gateway import GatewayMode, RouterProvider, RouterSearchTransform
 from .interceptors import InMemoryResultCacheStore, ResultCacheStore, ToolResultCache
 from .models import (
     Capability,
@@ -63,8 +64,9 @@ from .resilience import (
     categorize_failure,
     is_retryable,
 )
-from .retrieval import EmbeddingRetriever, HybridRetriever, KeywordRetriever
+from .retrieval import Embedder, Fusion, QdrantRetriever, RetrievalMode, document_text
 from .runtime import CapabilityFilter, MCPRuntime, StateStoreFactory
+from .tools import RoutedTool
 
 try:
     __version__ = version("mcp-capability-router")
@@ -83,25 +85,24 @@ __all__ = [
     "CapabilityNotFoundError",
     "CapabilityRegistry",
     "CapabilityRetriever",
-    "CapabilityRoutingMiddleware",
     "CapabilityType",
     "CapabilityTypeError",
     "CircuitOpenError",
     "ConfigurationError",
     "DiscoveryError",
-    "EmbeddingRetriever",
+    "Embedder",
     "FailureCategory",
     "FastMCPAdapter",
     "FastMCPTarget",
+    "Fusion",
+    "GatewayMode",
     "HealthState",
-    "HybridRetriever",
     "InMemoryRegistry",
     "InMemoryResultCacheStore",
     "Interceptor",
     "InterceptorFunction",
     "InterceptorLike",
     "InvalidRequestError",
-    "KeywordRetriever",
     "MCPAdapter",
     "MCPCapabilityRouterError",
     "MCPRuntime",
@@ -111,6 +112,7 @@ __all__ = [
     "PromptArgument",
     "PromptRetrievalError",
     "ProtocolError",
+    "QdrantRetriever",
     "RateLimitError",
     "RefreshError",
     "RefreshEventSource",
@@ -119,6 +121,10 @@ __all__ = [
     "Resource",
     "ResourceReadError",
     "ResultCacheStore",
+    "RetrievalMode",
+    "RoutedTool",
+    "RouterProvider",
+    "RouterSearchTransform",
     "RuntimeClosedError",
     "ServerConnectionError",
     "ServerError",
@@ -130,6 +136,7 @@ __all__ = [
     "ToolResultCache",
     "__version__",
     "categorize_failure",
+    "document_text",
     "is_retryable",
     "make_capability_id",
 ]

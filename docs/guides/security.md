@@ -51,9 +51,9 @@ only identifiers, such as server IDs, operation names, outcomes, and states.
 ## Restrict tools
 
 MCP tools can declare annotations, such as `readOnlyHint` and `destructiveHint`. The
-router keeps them in `capability.metadata["annotations"]`, as `read_only_hint` and
-`destructive_hint`, so that policies can act on them. An interceptor enforces a policy
-for every caller, agent or not:
+router exposes them as the `read_only`, `destructive`, `idempotent`, and `open_world`
+properties of `Tool`, so that policies can act on them. An interceptor enforces a
+policy for every caller, agent, application, or [gateway](gateway.md) client:
 
 <!-- test -->
 ```python
@@ -69,6 +69,7 @@ from mcp_capability_router import (
     Operation,
     OperationContext,
     RefreshPolicy,
+    Tool,
 )
 
 crm = FastMCP("crm")
@@ -88,18 +89,21 @@ def delete_customer(name: str) -> str:
 
 async def read_only(context: OperationContext, call_next: Callable[[], Awaitable[Any]]) -> Any:
     capability = context.capability
-    if context.operation is Operation.CALL_TOOL and capability is not None:
-        if not capability.metadata.get("annotations", {}).get("read_only_hint"):
-            msg = f"{capability.capability_id} may change data"
-            raise AuthorizationError(msg)
+    if (
+        context.operation is Operation.CALL_TOOL
+        and isinstance(capability, Tool)
+        and not capability.read_only
+    ):
+        msg = f"{capability.capability_id} may change data"
+        raise AuthorizationError(msg)
     return await call_next()
 
 
 async def main() -> None:
     async with MCPRuntime(interceptors=[read_only]) as runtime:
         await runtime.register_mcp("crm", crm, refresh=RefreshPolicy(on_register=True))
-        message = await runtime.execute("crm:tool:find_customer", {"name": "Acme"})
-        print(message.text)
+        result = await runtime.execute("crm:tool:find_customer", {"name": "Acme"})
+        print(result.data)
         try:
             await runtime.execute("crm:tool:delete_customer", {"name": "Acme"})
         except AuthorizationError as error:
@@ -121,11 +125,14 @@ IDs where it matters.
 
 Other controls:
 
-- Scope an agent to the servers it needs with
-  `CapabilityRoutingMiddleware(runtime, server_id=...)`, or with a separate runtime.
+- Scope an agent to the servers it needs with `route_tools(..., server_id=...)`,
+  `CapabilityRoutingMiddleware(runtime, server_id=...)`, or a separate runtime.
+- Hide tools from routing with `where`, such as `where=lambda tool: not tool.destructive`.
 - Require a human approval for destructive tools with LangChain's
   `HumanInTheLoopMiddleware`; see
-  [LangChain and LangGraph agents](agents.md#combine-with-langchain-middleware).
+  [Agent frameworks](integrations.md#combine-with-langchain-middleware).
+- Serve a [gateway](gateway.md) over HTTP only behind authentication; it can call
+  every registered tool.
 - Bound the damage of runaway agents with `max_concurrency`, `rate_limiter`, and
   `operation_timeout`.
 

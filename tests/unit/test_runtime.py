@@ -5,7 +5,6 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 import pytest
-from langchain_core.tools import StructuredTool
 from mcp import types
 from purgatory import AsyncCircuitBreakerFactory
 from refresh_engine import RefreshMode, RefreshStatus, TriggerSource
@@ -18,14 +17,16 @@ from mcp_capability_router import (
     HealthState,
     InMemoryRegistry,
     InvalidRequestError,
-    KeywordRetriever,
     MCPRuntime,
+    QdrantRetriever,
     RefreshError,
     RefreshPolicy,
     ResiliencePolicy,
+    RoutedTool,
     RuntimeClosedError,
     ServerConnectionError,
     ServerNotFoundError,
+    Tool,
 )
 from tests.support import (
     FakeAdapter,
@@ -84,11 +85,11 @@ class TestConstruction:
     async def test_defaults_and_custom_collaborators(self) -> None:
         async with MCPRuntime() as default:
             assert isinstance(default.registry, InMemoryRegistry)
-            assert isinstance(default.retriever, KeywordRetriever)
+            assert isinstance(default.retriever, QdrantRetriever)
             assert default.servers == ()
             assert not default.closed
         assert default.closed
-        registry, retriever = InMemoryRegistry(), KeywordRetriever()
+        registry, retriever = InMemoryRegistry(), QdrantRetriever()
         async with MCPRuntime(registry=registry, retriever=retriever) as custom:
             assert custom.registry is registry
             assert custom.retriever is retriever
@@ -353,16 +354,72 @@ class TestOperations:
         await runtime.execute("crm:tool:search")
         assert len(factory.adapters) == 2
 
-    async def test_as_tool(self, runtime: MCPRuntime) -> None:
+    async def test_tool(self, runtime: MCPRuntime) -> None:
         await runtime.register_server("crm", Factory(), refresh=RefreshPolicy(on_register=True))
-        routed = await runtime.as_tool("crm:tool:search")
-        assert isinstance(routed, StructuredTool)
+        routed = await runtime.tool("crm:tool:search")
         assert (routed.name, routed.description) == ("search", "Search records")
-        assert routed.metadata == {
-            "capability_id": "crm:tool:search",
-            "server_id": "crm",
-        }
-        assert (await runtime.as_tool("crm:tool:search", name="crm_search")).name == ("crm_search")
+        assert (routed.capability_id, routed.server_id) == ("crm:tool:search", "crm")
+        assert routed.input_schema == {"type": "object", "properties": {}}
+        assert routed.output_schema is None
+        assert await routed({"q": "x"}) == {"tool": "search", "arguments": {"q": "x"}}
+        assert (await runtime.tool("crm:tool:search", name="crm_search")).name == "crm_search"
+        with pytest.raises(CapabilityTypeError):
+            await runtime.tool("crm:resource:file:///guide.md")
+
+    async def test_routed_tool_descriptions_fall_back_to_title_and_name(self) -> None:
+        capability = tool("crm", "lookup", title="Look up")
+        async with MCPRuntime() as runtime:
+            assert RoutedTool("lookup", capability, runtime).description == "Look up"
+            untitled = RoutedTool("lookup", tool("crm", "lookup"), runtime)
+            assert untitled.description == "lookup"
+
+    async def test_route_tools_prefixes_names_across_servers(self, runtime: MCPRuntime) -> None:
+        await runtime.register_server("crm", Factory(), refresh=RefreshPolicy(on_register=True))
+        await runtime.register_server("erp", Factory(), refresh=RefreshPolicy(on_register=True))
+        routed = await runtime.route_tools("delete a record", limit=2)
+        assert sorted(item.name for item in routed) == ["crm_delete", "erp_delete"]
+        only = await runtime.route_tools("delete a record", server_id="crm", limit=1)
+        assert [(item.name, item.capability_id) for item in only] == [("delete", "crm:tool:delete")]
+        safe = await runtime.route_tools(
+            "delete a record", server_id="crm", where=lambda item: item.name != "delete"
+        )
+        assert [item.name for item in safe] == ["search"]
+        with pytest.raises(ConfigurationError, match="not callable"):
+            await runtime.route_tools("x", where=42)  # type: ignore[arg-type]
+
+    async def test_resolve_tool(self, runtime: MCPRuntime) -> None:
+        await runtime.register_server("crm", Factory(), refresh=RefreshPolicy(on_register=True))
+        await runtime.register_server("crm_eu", Factory(), refresh=RefreshPolicy(on_register=True))
+        resolved = await runtime.resolve_tool("crm_eu_search")
+        assert resolved is not None
+        assert (resolved.name, resolved.capability_id) == ("crm_eu_search", "crm_eu:tool:search")
+        scoped = await runtime.resolve_tool("delete", server_id="crm")
+        assert scoped is not None
+        assert scoped.capability_id == "crm:tool:delete"
+        assert await runtime.resolve_tool("missing") is None
+        assert await runtime.resolve_tool("crm_guide") is None
+        assert await runtime.resolve_tool("crm_delete", where=lambda item: item.destructive)
+        assert await runtime.resolve_tool("crm_delete", where=lambda _: False) is None
+        with pytest.raises(ServerNotFoundError):
+            await runtime.resolve_tool("search", server_id="other")
+
+    async def test_resolve_tool_rejects_ambiguous_names(self, runtime: MCPRuntime) -> None:
+        await runtime.register_server(
+            "a",
+            lambda: FakeAdapter(tools=[mcp_tool("b_c")]),
+            refresh=RefreshPolicy(on_register=True),
+        )
+        await runtime.register_server(
+            "a_b",
+            lambda: FakeAdapter(tools=[mcp_tool("c")]),
+            refresh=RefreshPolicy(on_register=True),
+        )
+        with pytest.raises(InvalidRequestError, match="ambiguous between servers: a, a_b"):
+            await runtime.resolve_tool("a_b_c")
+        only = await runtime.resolve_tool("a_b_c", where=lambda item: item.server_id == "a")
+        assert only is not None
+        assert isinstance(only.capability, Tool)
+        assert only.capability_id == "a:tool:b_c"
 
     async def test_health(self, runtime: MCPRuntime) -> None:
         await runtime.register_server("crm", Factory())

@@ -45,7 +45,7 @@ metadata:
 - Durable registry and refresh state must be kept together; partition state per server.
 - Keep cache stores scoped to trust boundaries. Use safe serialization and TTLs;
   never deserialize arbitrary executable objects.
-- Do not reimplement tenacity, purgatory, aiolimiter, hybrid fusion, or cache single-flight.
+- Do not reimplement tenacity, purgatory, aiolimiter, Qdrant rank fusion, or cache single-flight.
 - Errors must propagate in the router's classified hierarchy; never replace a failed
   discovery with an empty catalog.
 

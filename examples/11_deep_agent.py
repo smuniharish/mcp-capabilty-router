@@ -4,7 +4,8 @@ DeepAgents builds on LangChain agents, so the same `CapabilityRoutingMiddleware`
 adds the relevant MCP tools to each turn, next to DeepAgents' own planning and
 file tools.
 
-Requires a chat model, named as for `langchain.chat_models.init_chat_model`:
+Requires the `langchain` extra and a chat model, named as for
+`langchain.chat_models.init_chat_model`:
 
     MCP_ROUTER_EXAMPLE_MODEL=openai:gpt-5.4-mini   # and OPENAI_API_KEY
 """
@@ -18,7 +19,8 @@ from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, ToolMessage
 
-from mcp_capability_router import CapabilityRoutingMiddleware, MCPRuntime, RefreshPolicy
+from mcp_capability_router import MCPRuntime, RefreshPolicy
+from mcp_capability_router.integrations.langchain import CapabilityRoutingMiddleware
 
 QUESTION = "Find the customer Globex and list its invoices."
 

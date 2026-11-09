@@ -62,6 +62,36 @@ jobs:
       - run: uv sync --no-default-groups --group test --group examples --all-extras
       - run: uv run --no-sync pytest --cov
 
+  core:
+    name: Core without extras (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - "3.12"
+          - "3.15"
+    env:
+      HYPOTHESIS_PROFILE: ci
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: uv sync --no-default-groups --group test
+      - name: Test the core without any extra
+        run: >-
+          uv run --no-sync pytest --no-cov
+          --ignore=tests/unit/test_langchain.py
+          --ignore=tests/integration/test_langchain_agent.py
+          --ignore=tests/integration/test_examples.py
+          --ignore=tests/unit/test_otel.py
+          --ignore=tests/skill
+          --deselect=tests/unit/test_gateway.py::TestCodeMode::test_runs_code_that_calls_tools
+
   examples:
     name: Examples
     runs-on: ubuntu-latest
@@ -87,10 +117,16 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      qdrant:
+        image: qdrant/qdrant:v1.20.0
+        ports:
+          - 6333:6333
     env:
       MCP_ROUTER_EXAMPLE_POSTGRES_DSN: postgresql://postgres:postgres@localhost:5432/postgres
       MCP_ROUTER_EXAMPLE_NODE: "1"
       MCP_ROUTER_EXAMPLE_REDIS_URL: redis://localhost:6379/0
+      MCP_ROUTER_EXAMPLE_QDRANT_URL: http://localhost:6333
+      MCP_ROUTER_EXAMPLE_BROWSER: chrome
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -160,6 +196,7 @@ jobs:
     needs:
       - lint
       - test
+      - core
       - examples
       - docs
       - distribution

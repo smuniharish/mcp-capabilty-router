@@ -21,9 +21,10 @@ from contextlib import AsyncExitStack
 from typing import Any
 
 from common import crm_server
-from langchain_core.messages import ToolMessage
+from fastmcp.client.client import CallToolResult
 from purgatory import AsyncCircuitBreakerFactory, AsyncRedisUnitOfWork
 from purgatory.service._async.repository import AsyncRedisRepository
+from pydantic import TypeAdapter
 from redis.asyncio import Redis
 
 from mcp_capability_router import (
@@ -38,6 +39,7 @@ from mcp_capability_router import (
 )
 
 NAMESPACE = "mcp-capability-router-example:"
+RESULTS = TypeAdapter(CallToolResult)
 
 
 class RedisResultCacheStore(ResultCacheStore):
@@ -49,14 +51,14 @@ class RedisResultCacheStore(ResultCacheStore):
 
     async def get(self, key: str) -> Any | None:
         document = await self._client.get(self._namespace + key)
-        return None if document is None else ToolMessage.model_validate_json(document)
+        return None if document is None else RESULTS.validate_json(document)
 
     async def set(self, key: str, value: Any, ttl: float) -> None:
-        if not isinstance(value, ToolMessage):
-            msg = "this example store accepts only ToolMessage values"
+        if not isinstance(value, CallToolResult):
+            msg = "this example store accepts only CallToolResult values"
             raise TypeError(msg)
         await self._client.set(
-            self._namespace + key, value.model_dump_json(), px=max(1, round(ttl * 1000))
+            self._namespace + key, RESULTS.dump_json(value), px=max(1, round(ttl * 1000))
         )
 
     async def clear(self, prefix: str = "") -> None:
@@ -120,8 +122,8 @@ async def main() -> None:
 
         print("a read-only result is cached once for every process:")
         for runtime in (first, second):
-            message = await runtime.execute("crm:tool:search_customers", {"query": "acme"})
-            print(f"  -> {message.artifact['structured_content']['result'][0]['name']}")
+            result = await runtime.execute("crm:tool:search_customers", {"query": "acme"})
+            print(f"  -> {result.data[0]['name']}")
 
         print("\na failing server opens the circuit for every process:")
         first_crm.down = True

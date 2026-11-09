@@ -85,20 +85,18 @@ resilience pipeline as `connect` operations.
 
 `FastMCPAdapter` returns:
 
-- from `execute`: a LangChain `ToolMessage`. Its `content` holds the content blocks
-  of the result, its `text` the text of those blocks, and its `artifact` the
-  structured content, as converted by LangChain's `langchain.mcp` module. A tool
-  that reports an error raises `ToolExecutionError`.
+- from `execute`: FastMCP's `CallToolResult`. Its `content` holds the content
+  blocks of the result, `structured_content` the structured content, and `data` the
+  value parsed with the tool's output schema. A tool that reports an error raises
+  `ToolExecutionError`.
 - from `read_resource`: the MCP resource contents, a list of
   `TextResourceContents` and `BlobResourceContents`.
 - from `get_prompt`: the MCP `GetPromptResult`, whose `messages` are ready to send
   to a model.
 
-`langchain.mcp` is currently a beta module of LangChain.
-
 ## Write a custom adapter
 
-Any object with the methods of the `MCPAdapter` protocol is an adapter. Register it
+Subclass the `MCPAdapter` ABC to reach a service that FastMCP cannot. Register it
 with a factory, which the runtime calls on first use and after every reconnect:
 
 ```python

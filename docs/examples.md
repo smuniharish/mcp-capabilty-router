@@ -1,7 +1,7 @@
 # Examples
 
-The examples include durable refresh state, downstream storage injection, shared
-Redis resilience, and OpenTelemetry alongside the core routing workflows.
+The examples cover the core routing workflows, any agent framework, the MCP
+gateway, durable and shared state, and OpenTelemetry.
 
 These programs use only the public API. Find them, with instructions for running
 them, in the
@@ -146,8 +146,9 @@ continuous integration. Most of them share this module:
 
 ## Semantic retrieval
 
-Requires an embedding model: set `MCP_ROUTER_EXAMPLE_EMBEDDINGS`, such as
-`openai:text-embedding-3-small`, and the provider's credentials.
+Requires the `langchain` extra and an embedding model: set
+`MCP_ROUTER_EXAMPLE_EMBEDDINGS`, such as `openai:text-embedding-3-small`, and the
+provider's credentials.
 
 ```python
 --8<--
@@ -156,6 +157,8 @@ examples/08_semantic_retrieval.py
 ```
 
 ## A LangGraph workflow
+
+Requires the `langchain` extra.
 
 === "Program"
 
@@ -175,8 +178,8 @@ examples/08_semantic_retrieval.py
 
 ## Agent middleware
 
-Requires a chat model: set `MCP_ROUTER_EXAMPLE_MODEL`, such as
-`openai:gpt-5.4-mini`, and the provider's credentials.
+Requires the `langchain` extra and a chat model: set `MCP_ROUTER_EXAMPLE_MODEL`,
+such as `openai:gpt-5.4-mini`, and the provider's credentials.
 
 ```python
 --8<--
@@ -258,11 +261,21 @@ Install the `otel` extra. By default the example inspects spans and metrics in
 memory. Set `OTEL_EXPORTER_OTLP_ENDPOINT` to export to an OTLP collector; configure
 TLS using the standard OpenTelemetry environment variables.
 
-```python
---8<--
-examples/16_opentelemetry.py
---8<--
-```
+=== "Program"
+
+    ```python
+    --8<--
+    examples/16_opentelemetry.py
+    --8<--
+    ```
+
+=== "Output"
+
+    ```text
+    --8<--
+    examples/output/16_opentelemetry.txt
+    --8<--
+    ```
 
 ## Redis shared state
 
@@ -270,27 +283,122 @@ Install the `redis` extra and set `MCP_ROUTER_EXAMPLE_REDIS_URL` to a dedicated
 example database. The example clears only its own cache and CRM breaker keys.
 Two runtimes demonstrate cross-process cache hits and circuit state.
 
+=== "Program"
+
+    ```python
+    --8<--
+    examples/17_redis_shared_state.py
+    --8<--
+    ```
+
+=== "Output"
+
+    ```text
+    --8<--
+    examples/output/17_redis_shared_state.txt
+    --8<--
+    ```
+
+## A shared Qdrant index
+
+Requires a Qdrant server: set `MCP_ROUTER_EXAMPLE_QDRANT_URL`, such as
+`http://localhost:6333`. Set `MCP_ROUTER_EXAMPLE_EMBEDDINGS` as well, with the
+`langchain` extra, for hybrid rankings.
+
 ```python
 --8<--
-examples/17_redis_shared_state.py
---8<--
-```
-
-## Hybrid retrieval
-
-Set `MCP_ROUTER_EXAMPLE_EMBEDDINGS` for real semantic rankings. Without a model
-the example uses deterministic test embeddings to verify the integration.
-
-```python
---8<--
-examples/18_hybrid_retrieval.py
+examples/18_qdrant_server.py
 --8<--
 ```
 
 ## Read-only result caching
 
+=== "Program"
+
+    ```python
+    --8<--
+    examples/19_result_cache.py
+    --8<--
+    ```
+
+=== "Output"
+
+    ```text
+    --8<--
+    examples/output/19_result_cache.txt
+    --8<--
+    ```
+
+## An MCP gateway
+
+Run it with `--serve` to serve the gateway over Streamable HTTP for any MCP client.
+
+=== "Program"
+
+    ```python
+    --8<--
+    examples/20_mcp_gateway.py
+    --8<--
+    ```
+
+=== "Output"
+
+    ```text
+    --8<--
+    examples/output/20_mcp_gateway.txt
+    --8<--
+    ```
+
+## Code mode
+
+Experimental. Requires the `codemode` extra.
+
+=== "Program"
+
+    ```python
+    --8<--
+    examples/21_code_mode.py
+    --8<--
+    ```
+
+=== "Output"
+
+    ```text
+    --8<--
+    examples/output/21_code_mode.txt
+    --8<--
+    ```
+
+## Any framework: the OpenAI SDK
+
+Requires the `openai` package and an OpenAI-compatible endpoint: set
+`MCP_ROUTER_EXAMPLE_OPENAI_MODEL`, such as `gpt-5.4-mini`, `OPENAI_API_KEY`, and
+optionally `OPENAI_BASE_URL`.
+
 ```python
 --8<--
-examples/19_result_cache.py
+examples/22_any_framework.py
+--8<--
+```
+
+## An agent behind the gateway
+
+Requires the `langchain` extra and a chat model: set `MCP_ROUTER_EXAMPLE_MODEL`,
+such as `openai:gpt-5.4-mini`, and the provider's credentials.
+
+```python
+--8<--
+examples/23_gateway_agent.py
+--8<--
+```
+
+## Browser automation with Playwright
+
+Requires Node.js with `npx` and a browser that Playwright can drive: set
+`MCP_ROUTER_EXAMPLE_BROWSER`, such as `chromium` or `msedge`.
+
+```python
+--8<--
+examples/24_browser_automation.py
 --8<--
 ```

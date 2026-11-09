@@ -16,13 +16,14 @@ uv sync --all-extras --all-groups
 
 `uv sync` creates a virtual environment and installs the package in editable mode.
 The default `dev` group includes tests, lint, and types. Use `--all-extras --all-groups`
-for documentation, examples, telemetry, Redis, auditing, and packaging checks.
+for the LangChain integration, code mode, documentation, examples, telemetry, Redis,
+auditing, and packaging checks.
 
 ## Project layout
 
 | Path | Contents |
 | --- | --- |
-| `src/mcp_capability_router/` | The package. Core public names are exported from `mcp_capability_router`; optional telemetry and contract suites live in the public `otel` and `testing` modules. Implementation details live in `_internal`. |
+| `src/mcp_capability_router/` | The package. Core public names are exported from `mcp_capability_router`; telemetry, contract suites, and framework integrations live in the public `otel`, `testing`, and `integrations.<framework>` modules. Implementation details live in `_internal`. |
 | `tests/unit/`, `tests/integration/` | Tests of each module, of real FastMCP servers, and of the examples. |
 | `tests/property/` | Property-based and stateful tests written with Hypothesis. |
 | `examples/` | Runnable examples, with their expected output in `examples/output/`. |
@@ -51,10 +52,13 @@ uv run python scripts/check_site_links.py
 - Tests treat warnings as errors, and coverage must stay at 100% of lines and
   branches. Exclude code from coverage only when it cannot run, such as the body of
   an abstract method.
+- The core must work without any extra. The `core` job of continuous integration
+  installs only the `test` group with `uv sync --no-default-groups --group test` and
+  runs every test except those of the extras; see `.github/workflows/ci.yml`.
 - Continuous integration runs the Hypothesis tests with more examples. Use the same
   profile locally with `HYPOTHESIS_PROFILE=ci`.
-- Examples that need a model, embeddings, PostgreSQL, Redis, or Node.js run only when their
-  environment variable is set; see [`.env.example`](.env.example). The test suite
+- Examples that need a model, embeddings, PostgreSQL, Redis, Qdrant, Node.js, or a
+  browser run only when their environment variable is set; see [`.env.example`](.env.example). The test suite
   runs the model-based examples with scripted models.
 - After changing an example, regenerate its expected output with
   `uv run python scripts/run_examples.py --update` and review the difference.
@@ -76,11 +80,17 @@ uv run python scripts/validate_distribution.py dist --python 3.12 --python 3.15
 ## Making changes
 
 - Add a test for every behavior change, and a regression test for every fix.
-- Build on the ecosystem: use FastMCP, LangChain, LangGraph, refresh-engine, and
-  well-maintained PyPI packages instead of reimplementing what they provide.
+- Build on the ecosystem: use FastMCP, Qdrant, refresh-engine, and well-maintained
+  PyPI packages instead of reimplementing what they provide.
+- Keep the core framework-agnostic and async. Code that imports an agent framework
+  belongs in `mcp_capability_router.integrations.<framework>`, behind an extra of the
+  same name.
+- Define extension points as ABCs, and accept application-owned instances of the
+  customizable parts of dependencies, such as FastMCP clients, Qdrant clients,
+  refresh-engine stores, and purgatory storage.
 - Keep the public API typed and documented with Google-style docstrings. New public
-  names must be exported from `mcp_capability_router` or its public `otel` and `testing`
-  modules and listed in the API reference.
+  names must be exported from `mcp_capability_router` or its public `otel`, `testing`,
+  or `integrations.<framework>` modules and listed in the API reference.
 - Preserve the guarantees described in the
   [architecture overview](docs/architecture/overview.md).
 - Update the guides, examples, Agent Skills, and `CHANGELOG.md` together with the

@@ -5,7 +5,7 @@
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
 | `CapabilityNotFoundError: ... refresh its server first` | The server was never refreshed, or the ID is wrong. | Use `RefreshPolicy(on_register=True)` or `refresh_server`; IDs are `<server_id>:<type>:<name>`, and resource names are full URIs. |
-| `retrieve` returns `[]` | Empty registry, or no shared words with the request. | Refresh first; use `query` with `on_query_miss`; improve tool descriptions; use `EmbeddingRetriever`. |
+| `retrieve` returns `[]` | Empty registry, or no shared words with the request. | Refresh first; use `query` with `on_query_miss`; improve tool descriptions; give `QdrantRetriever` an embedder. |
 | The wrong tool ranks first | Keyword retrieval matches words, not meanings. | Improve names, descriptions, and tags; filter by `server_id` or `type`; raise `limit`; use embeddings. |
 | `CapabilityTypeError` | A resource or prompt passed to `execute`, or similar. | Use `execute` for tools, `read_resource` for resources, `get_prompt` for prompts. |
 | `InvalidRequestError` from `get_prompt` | A required argument is missing, or an argument is not a string. | Pass every required argument as a string. |
@@ -30,7 +30,7 @@
 | `ToolExecutionError` | The tool ran and reported an error, often invalid arguments. | Compare arguments with `tool.input_schema`; it is never retried. |
 | `AuthenticationError`, `AuthorizationError` | Rejected credentials or a forbidden operation, or an interceptor's policy. | Fix credentials in the target or factory; not retried. |
 | `ServerConnectionError` | The server is unreachable or the session was lost. | The next operation reconnects; check the URL, the command, and the network. |
-| `ConfigurationError` | Invalid argument, duplicate server ID, an ID still being unregistered, or an object that does not implement its protocol. | Read the message; it names the problem. Await `unregister_server` before reusing an ID. |
+| `ConfigurationError` | Invalid argument, duplicate server ID, an ID still being unregistered, or an object that does not subclass its ABC. | Read the message; it names the problem. Await `unregister_server` before reusing an ID. |
 | `ServerNotFoundError: server ... is closed` | An operation was still queued when its server was unregistered or its runtime closed. | Expected during shutdown; the closed server is not reconnected. |
 | `RuntimeClosedError` | The runtime was used after `close`, or closed during a registration. | Keep one runtime open for the application's lifetime. |
 

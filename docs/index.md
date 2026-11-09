@@ -9,10 +9,10 @@ hide:
 servers, through one resilient runtime.**
 
 mcp-capability-router is an asyncio-first Python library that sits between your
-LangChain or LangGraph agents and your MCP servers. It discovers what each server
-offers, keeps that catalog current, ranks it against each request, and runs every
-server operation through concurrency limits, circuit breakers, retries, rate limits,
-and timeouts. An agent sees only the few tools that matter for the current turn,
+agents and your MCP servers, whatever framework the agents use. It discovers what
+each server offers, keeps that catalog current, ranks it against each request, and
+runs every server operation through concurrency limits, circuit breakers, retries,
+rate limits, and timeouts. An agent sees only the few tools that matter for the current turn,
 however many servers and tools you register.
 
 ![Architecture](assets/diagrams/architecture-light.png#only-light)
@@ -24,8 +24,8 @@ however many servers and tools you register.
 
     ---
 
-    Keyword or embedding retrieval selects the capabilities that match each
-    request, so models stay fast, inexpensive, and accurate with thousands of
+    BM25, dense, or hybrid retrieval with Qdrant selects the capabilities that
+    match each request, so models stay fast, inexpensive, and accurate with thousands of
     tools.
 
 -   :material-sync:{ .lg .middle } **Always current**
@@ -42,12 +42,12 @@ however many servers and tools you register.
     Every server operation runs through a concurrency limit, interceptors, a
     circuit breaker, retries, a rate limit, and a timeout.
 
--   :material-robot-outline:{ .lg .middle } **Built for LangChain**
+-   :material-robot-outline:{ .lg .middle } **Any agent framework**
 
     ---
 
-    Agent middleware for `create_agent` and Deep Agents, LangChain tools for
-    LangGraph, and FastMCP connectivity for every MCP transport.
+    Ready-to-call tools for any framework, LangChain middleware for `create_agent`
+    and Deep Agents, and an MCP gateway that serves the router to any MCP client.
 
 </div>
 
@@ -90,11 +90,11 @@ def list_alerts(region: str) -> list[str]:
 async def main() -> None:
     async with MCPRuntime() as runtime:
         await runtime.register_mcp("weather", weather, refresh=RefreshPolicy(on_register=True))
-        [tool] = await runtime.retrieve("What is the forecast for Paris?", limit=1)
+        [tool] = await runtime.route_tools("What is the forecast for Paris?", limit=1)
         print(tool.capability_id)
 
-        message = await runtime.execute(tool.capability_id, {"city": "Paris"})
-        print(message.text)
+        result = await tool({"city": "Paris"})
+        print(result.data)
 
 
 asyncio.run(main())
@@ -113,13 +113,16 @@ server, and the call runs through the resilience pipeline.
 
 ## Route tools for an agent
 
-Add the middleware to a LangChain agent, and every model call receives the tools
-that match the latest user message:
+Each routed tool has a `name`, a `description`, and an `input_schema`, which any
+[agent framework](guides/integrations.md) can show a model; awaiting it runs the MCP
+tool through the runtime. With the `langchain` extra, add the middleware to a
+LangChain agent, and every model call receives the tools that match the latest user
+message:
 
 ```python
 from langchain.agents import create_agent
 
-from mcp_capability_router import CapabilityRoutingMiddleware
+from mcp_capability_router.integrations.langchain import CapabilityRoutingMiddleware
 
 agent = create_agent(
     "openai:gpt-5.4-mini",
@@ -130,6 +133,8 @@ result = await agent.ainvoke(
     {"messages": [{"role": "user", "content": "What is the forecast for Paris?"}]}
 )
 ```
+
+Any MCP client can reach the router through its [MCP gateway](guides/gateway.md).
 
 ## Where to go next
 

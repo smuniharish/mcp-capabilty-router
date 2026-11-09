@@ -4,6 +4,7 @@
 | --- | --- |
 | `CapabilityRegistry` | `upsert_many`, `remove`, `remove_server`, `get`, `list` |
 | `CapabilityRetriever` | `retrieve(query, candidates, *, limit)` |
+| `Embedder` | `embed_documents(texts)`, `embed_query(text)` |
 | `MCPAdapter` | `connect`, `close`, three list methods, `call_tool`, `read_resource`, `get_prompt` |
 | `Interceptor` | `__call__(context, call_next, /)` |
 | `ResultCacheStore` | `get`, `set(key, value, ttl)`, `clear(prefix="")` |
@@ -25,7 +26,8 @@ State transactions atomically apply both puts and deletes. Preserve every
 cheap indicator, metadata, dependencies, and timezone-aware refresh timestamp.
 Use `(server_id, resource_id)` keys when servers share a table.
 
-Supply configured LangChain `VectorStore` and compressors to `EmbeddingRetriever`,
+Supply an `Embedder` and a configured `AsyncQdrantClient` to `QdrantRetriever`
+(or, with the `langchain` extra, a `VectorStore` and compressor to `VectorStoreRetriever`),
 a purgatory factory to `ResiliencePolicy`, and a configured FastMCP `Client` or
 constructor options to `register_mcp`. Close shared pools and clients after their
-consumers. The router does not require an XAI dependency.
+consumers.

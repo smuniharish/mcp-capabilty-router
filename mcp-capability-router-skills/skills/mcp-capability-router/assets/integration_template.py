@@ -1,10 +1,15 @@
 """Template for a production mcp-capability-router integration.
 
 Copy this file into the application, then adapt every place marked "Adapt:".
-As written, it routes requests to an in-process demo server, shows a policy
+As written, it routes a request to an in-process demo server, shows a policy
 rejecting a destructive tool, and reports health and metrics:
 
     python integration_template.py
+
+The runtime works with any agent framework: `route_tools` returns tools with a
+name, a description, and a JSON schema, and `as_mcp_server` serves the router to
+any MCP client. `build_agent` shows the LangChain integration, which needs the
+`langchain` extra.
 """
 
 from __future__ import annotations
@@ -16,7 +21,6 @@ from typing import TYPE_CHECKING, Any
 
 from aiolimiter import AsyncLimiter
 from fastmcp import FastMCP
-from langchain.agents import create_agent
 from refresh_engine import InMemoryMetrics
 from tenacity import (
     AsyncRetrying,
@@ -27,13 +31,12 @@ from tenacity import (
 
 from mcp_capability_router import (
     AuthorizationError,
-    CapabilityRoutingMiddleware,
-    CapabilityType,
     MCPRuntime,
     Operation,
     OperationContext,
     RefreshPolicy,
     ResiliencePolicy,
+    Tool,
     is_retryable,
 )
 
@@ -79,11 +82,14 @@ async def enforce_write_policy(
     Adapt: replace with the policy of the application.
     """
     capability = context.capability
-    if context.operation is Operation.CALL_TOOL and capability is not None:
-        read_only = capability.metadata.get("annotations", {}).get("read_only_hint")
-        if not read_only and capability.capability_id not in ALLOWED_WRITES:
-            msg = f"{capability.capability_id} may change data and is not allowed"
-            raise AuthorizationError(msg)
+    if (
+        context.operation is Operation.CALL_TOOL
+        and isinstance(capability, Tool)
+        and not capability.read_only
+        and capability.capability_id not in ALLOWED_WRITES
+    ):
+        msg = f"{capability.capability_id} may change data and is not allowed"
+        raise AuthorizationError(msg)
     return await call_next()
 
 
@@ -113,12 +119,17 @@ async def open_runtime(metrics: InMemoryMetrics) -> AsyncGenerator[MCPRuntime, N
         yield runtime
 
 
-def build_agent(runtime: MCPRuntime, model: BaseChatModel | str):
+def build_agent(runtime: MCPRuntime, model: BaseChatModel | str) -> Any:
     """Return a LangChain agent that sees only the tools each turn needs.
 
-    Invoke the agent with `await agent.ainvoke(...)`; the middleware is
-    asynchronous.
+    Needs the `langchain` extra. Invoke the agent with `await agent.ainvoke(...)`;
+    the middleware is asynchronous. Adapt: for another framework, show it the
+    tools of `await runtime.route_tools(request)` instead.
     """
+    from langchain.agents import create_agent
+
+    from mcp_capability_router.integrations.langchain import CapabilityRoutingMiddleware
+
     return create_agent(
         model,
         tools=[],
@@ -132,11 +143,9 @@ async def main() -> None:
     """Route one request, try a forbidden tool, and report health and metrics."""
     metrics = InMemoryMetrics()
     async with open_runtime(metrics) as runtime:
-        [tool] = await runtime.query(
-            "find tickets about the VPN", type=CapabilityType.TOOL, limit=1
-        )
-        message = await runtime.execute(tool.capability_id, {"text": "VPN"})
-        print(f"{tool.capability_id}: {message.text}")
+        [tool] = await runtime.route_tools("search tickets about the VPN", limit=1)
+        result = await tool({"text": "VPN"})
+        print(f"{tool.name}: {result.data}")
         try:
             await runtime.execute("helpdesk:tool:delete_ticket", {"ticket_id": "T-2"})
         except AuthorizationError as error:

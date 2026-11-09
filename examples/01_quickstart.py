@@ -18,7 +18,7 @@ async def main() -> None:
         print(f"best match: {match.capability_id}")
 
         result = await runtime.execute(match.capability_id, {"query": "acme"})
-        print(f"result: {result.artifact['structured_content']['result']}")
+        print(f"result: {result.data}")
 
 
 if __name__ == "__main__":
