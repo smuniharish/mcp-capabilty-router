@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "mcp-capability-router"
-version = "1.0.1"
+version = "1.0.2"
 description = "Framework-agnostic, asyncio-first capability routing for MCP tools, resources, and prompts."
 readme = "README.md"
 requires-python = ">=3.12"
