@@ -57,7 +57,11 @@ The runtime traces every server operation by default through the OpenTelemetry A
 spans appear once the application configures an SDK (the `otel` extra installs it)
 globally or passes `MCPRuntime(tracer_provider=...)`. Each operation records one
 client span, such as `tools/call search_docs`, with scope `mcp_capability_router`.
-Arguments and results are not recorded.
+Tool arguments and results are recorded as JSON in `gen_ai.tool.call.arguments`
+and `gen_ai.tool.call.result` by default, including potentially sensitive data.
+Use `MCPRuntime(capture_tool_content=False)` to omit them from router spans.
+This does not control FastMCP, remote servers, other instrumentation, or exception
+messages. Prompt arguments and resource contents are not captured by the router.
 
 `MCPRuntime(tracing=...)` chooses the spans, so each call appears once:
 
@@ -69,6 +73,7 @@ Arguments and results are not recorded.
 The trace context reaches servers in every mode. The MCP SDK's `MCP send ...`
 transport spans (scope `mcp-python-sdk`) remain; filter them by scope in the
 collector. Pass an `OpenTelemetryInterceptor` among `interceptors` to choose the
-tracer or its position; the runtime then adds none. LangChain tracing records
+tracer or its position; the runtime then adds none and the explicit interceptor's
+own `capture_tool_content` setting applies. LangChain tracing records
 routed tool calls like any tool call. Configure and shut down providers in the
 application.

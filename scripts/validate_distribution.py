@@ -28,6 +28,7 @@ RUNTIME_DEPENDENCIES = {
     "httpx2",
     "mcp",
     "opentelemetry-api",
+    "pydantic",
     "purgatory",
     "qdrant-client",
     "refresh-engine",

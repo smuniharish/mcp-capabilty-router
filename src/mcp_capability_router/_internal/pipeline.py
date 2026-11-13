@@ -123,6 +123,7 @@ class OperationPipeline:
         metrics_sink: MetricsSink | None,
         tracing: TracingMode = "router",
         tracer_provider: TracerProvider | None = None,
+        capture_tool_content: bool = True,
     ) -> None:
         """Validate and store the configuration."""
         if (
@@ -146,7 +147,9 @@ class OperationPipeline:
             msg = f"tracing must be one of {', '.join(map(repr, _TRACING_MODES))}, got {tracing!r}"
             raise ConfigurationError(msg)
         # Created in every mode so that `tracer_provider` is always validated.
-        router_spans = OpenTelemetryInterceptor(tracer_provider=tracer_provider)
+        router_spans = OpenTelemetryInterceptor(
+            tracer_provider=tracer_provider, capture_tool_content=capture_tool_content
+        )
         if tracing in ("router", "all") and not any(
             isinstance(interceptor, OpenTelemetryInterceptor) for interceptor in chain
         ):

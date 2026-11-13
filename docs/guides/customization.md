@@ -21,7 +21,7 @@ configuration behind another settings layer.
 | Any embedding model | `Embedder` subclass | `QdrantRetriever(embedder=...)` |
 | LangChain (`langchain` extra) | Embeddings, `VectorStore`, document compressor | `LangChainEmbedder`, `VectorStoreRetriever` |
 | LangChain (`langchain` extra) | Model, tool policy, agent middleware | Application-owned agent plus `CapabilityRoutingMiddleware` |
-| OpenTelemetry | Tracer, meter, providers and exporters; which spans are recorded | `MCPRuntime(tracing=..., tracer_provider=...)`, `OpenTelemetryInterceptor`, and refresh-engine metrics sink |
+| OpenTelemetry | Tracer, meter, providers and exporters; spans and tool content capture | `MCPRuntime(tracing=..., tracer_provider=..., capture_tool_content=...)`, `OpenTelemetryInterceptor`, and refresh-engine metrics sink |
 
 `mcp`, `httpx2`, and `anyio` support transport types and error handling. These are
 implementation dependencies rather than independently configurable services. Logging uses the standard Python logger.

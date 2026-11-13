@@ -6,6 +6,12 @@ All notable changes are recorded here using
 
 ## [Unreleased]
 
+### Added
+
+- Router tool spans capture arguments and results by default. Set
+  `capture_tool_content=False` on `MCPRuntime` or an explicitly supplied
+  `OpenTelemetryInterceptor` to omit them.
+
 ## [1.0.1]
 
 ### Added

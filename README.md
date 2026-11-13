@@ -75,6 +75,10 @@ Redis circuit storage, and `all` for every one of them, such as
 `pip install "mcp-capability-router[langchain,otel]"`. Configure resilience with `MCPRuntime(resilience=ResiliencePolicy(...))`;
 individual registrations can supply their own policy.
 
+Router tool spans include arguments and results by default when tracing is
+configured. These may contain sensitive data; set
+`MCPRuntime(capture_tool_content=False)` to omit them from router spans.
+
 ## Quick start
 
 Register a server, let the runtime discover its capabilities, and route a request to

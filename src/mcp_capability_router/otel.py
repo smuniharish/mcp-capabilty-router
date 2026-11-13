@@ -10,10 +10,12 @@ extra) as the runtime's `metrics`.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Literal
 
 from opentelemetry import trace
 from opentelemetry.trace import SpanKind, Status, StatusCode, Tracer, TracerProvider
+from pydantic import TypeAdapter
 
 from ._internal.version import VERSION
 from .contracts import CallNext, Interceptor, Operation, OperationContext
@@ -24,6 +26,8 @@ __all__ = ["INSTRUMENTATION_NAME", "OpenTelemetryInterceptor", "TracingMode"]
 
 INSTRUMENTATION_NAME = "mcp_capability_router"
 """The instrumentation scope of the router's spans."""
+
+logger = logging.getLogger("mcp_capability_router")
 
 type TracingMode = Literal["router", "fastmcp", "all", "off"]
 """Which spans the runtime's server operations record.
@@ -48,6 +52,16 @@ _METHODS = {
     Operation.READ_RESOURCE: "resources/read",
     Operation.GET_PROMPT: "prompts/get",
 }
+_JSON_ADAPTER = TypeAdapter(Any)
+
+
+def _record_content(span: trace.Span, attribute: str, value: Any) -> None:
+    try:
+        content = _JSON_ADAPTER.dump_json(value, by_alias=True).decode("utf-8")
+    except (TypeError, ValueError, RecursionError, OverflowError):
+        logger.warning("Could not serialize tool content for span attribute %s", attribute)
+    else:
+        span.set_attribute(attribute, content)
 
 
 class OpenTelemetryInterceptor(Interceptor):
@@ -58,7 +72,8 @@ class OpenTelemetryInterceptor(Interceptor):
     `mcp.method.name`, `gen_ai.tool.name`, `gen_ai.prompt.name`, or
     `mcp.resource.uri`, along with `mcp_capability_router.server_id`. A failed
     operation sets the span status to error, records the exception, and sets
-    `error.type`. Arguments and results are never recorded.
+    `error.type`. Tool arguments and results are recorded as JSON by default;
+    they can contain sensitive data. Disable capture with `capture_tool_content=False`.
 
     The runtime adds one as its outermost interceptor in the `"router"` and
     `"all"` tracing modes, so its span covers the other interceptors and every
@@ -78,6 +93,7 @@ class OpenTelemetryInterceptor(Interceptor):
         tracer: Tracer | None = None,
         *,
         tracer_provider: TracerProvider | None = None,
+        capture_tool_content: bool = True,
     ) -> None:
         """Create an interceptor that records spans with `tracer`.
 
@@ -86,6 +102,8 @@ class OpenTelemetryInterceptor(Interceptor):
                 `tracer_provider` when `None`.
             tracer_provider: The provider of the default tracer; the global
                 tracer provider when `None`. Ignored when `tracer` is given.
+            capture_tool_content: Record tool arguments and results in span
+                attributes. Disable this to avoid exporting tool content.
 
         Raises:
             ConfigurationError: If `tracer` is not an OpenTelemetry tracer or
@@ -99,6 +117,10 @@ class OpenTelemetryInterceptor(Interceptor):
                 f"tracer_provider {tracer_provider!r} is not an opentelemetry.trace.TracerProvider"
             )
             raise ConfigurationError(msg)
+        if not isinstance(capture_tool_content, bool):
+            msg = "capture_tool_content must be a bool"
+            raise ConfigurationError(msg)
+        self._capture_tool_content = capture_tool_content
         self._tracer = (
             tracer
             if tracer is not None
@@ -134,10 +156,20 @@ class OpenTelemetryInterceptor(Interceptor):
             record_exception=False,
             set_status_on_exception=False,
         ) as span:
+            capture = (
+                self._capture_tool_content
+                and context.operation is Operation.CALL_TOOL
+                and span.is_recording()
+            )
+            if capture:
+                _record_content(span, "gen_ai.tool.call.arguments", context.arguments)
             try:
-                return await call_next()
+                result = await call_next()
             except BaseException as error:
                 span.set_attribute("error.type", type(error).__qualname__)
                 span.record_exception(error)
                 span.set_status(Status(StatusCode.ERROR, str(error) or None))
                 raise
+            if capture:
+                _record_content(span, "gen_ai.tool.call.result", result)
+            return result

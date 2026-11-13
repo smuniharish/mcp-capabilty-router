@@ -158,6 +158,7 @@ class MCPRuntime:
         state_store_factory: StateStoreFactory | None = None,
         tracing: TracingMode = "router",
         tracer_provider: TracerProvider | None = None,
+        capture_tool_content: bool = True,
     ) -> None:
         """Create a runtime.
 
@@ -188,6 +189,10 @@ class MCPRuntime:
                 only once the application configures an OpenTelemetry SDK.
             tracer_provider: The OpenTelemetry tracer provider of the router's
                 spans; the global tracer provider when `None`.
+            capture_tool_content: Record tool arguments and results in router
+                spans, which may expose sensitive data. Set to `False` to omit
+                them. An explicitly supplied `OpenTelemetryInterceptor` controls
+                its own content capture.
 
         Raises:
             ConfigurationError: If an argument is invalid.
@@ -217,6 +222,7 @@ class MCPRuntime:
             metrics_sink=metrics,
             tracing=tracing,
             tracer_provider=tracer_provider,
+            capture_tool_content=capture_tool_content,
         )
         self._metrics = metrics
         self._state_store_factory = state_store_factory

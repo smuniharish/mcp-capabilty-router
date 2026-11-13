@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import logging
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import pytest
@@ -115,6 +118,8 @@ async def test_operations_are_traced_by_default(exporter: InMemorySpanExporter) 
         "gen_ai.tool.name": "search",
         "gen_ai.operation.name": "execute_tool",
         "mcp_capability_router.capability_id": "crm:tool:search",
+        "gen_ai.tool.call.arguments": '{"q":"secret"}',
+        "gen_ai.tool.call.result": '{"tool":"search","arguments":{"q":"secret"}}',
     }
     attributes = spans["resources/read file:///guide.md"].attributes or {}
     assert attributes["mcp.resource.uri"] == "file:///guide.md"
@@ -133,6 +138,74 @@ async def test_failures_are_recorded(exporter: InMemorySpanExporter) -> None:
     assert span.status.description == "bad input"
     assert (span.attributes or {})["error.type"] == "ToolExecutionError"
     assert [event.name for event in span.events] == ["exception"]
+    assert (span.attributes or {})["gen_ai.tool.call.arguments"] == "{}"
+    assert "gen_ai.tool.call.result" not in (span.attributes or {})
+
+
+@pytest.mark.parametrize("capture", [True, False])
+async def test_fastmcp_tool_content_capture(exporter: InMemorySpanExporter, capture: bool) -> None:
+    async with MCPRuntime(
+        tracer_provider=traced(exporter), capture_tool_content=capture
+    ) as runtime:
+        await runtime.register_mcp("crm", lookup_server([]), refresh=ON_REGISTER)
+        result = await runtime.execute("crm:tool:lookup", {"query": "acme"})
+    span = next(s for s in exporter.get_finished_spans() if s.name == "tools/call lookup")
+    attributes = span.attributes or {}
+    if capture:
+        arguments = attributes["gen_ai.tool.call.arguments"]
+        result_json = attributes["gen_ai.tool.call.result"]
+        assert isinstance(arguments, str)
+        assert isinstance(result_json, str)
+        assert json.loads(arguments) == {"query": "acme"}
+        output = json.loads(result_json)
+        assert output["content"][0]["text"] == "acme"
+        assert output["is_error"] is False
+    else:
+        assert "gen_ai.tool.call.arguments" not in attributes
+        assert "gen_ai.tool.call.result" not in attributes
+    assert result.content[0].text == "acme"
+
+
+async def test_unserializable_content_does_not_break_tool_calls(
+    exporter: InMemorySpanExporter, caplog: pytest.LogCaptureFixture
+) -> None:
+    value = object()
+    async with MCPRuntime(tracer_provider=traced(exporter)) as runtime:
+        await runtime.register_server("crm", adapter, refresh=ON_REGISTER)
+        with caplog.at_level(logging.WARNING, logger="mcp_capability_router"):
+            result = await runtime.execute("crm:tool:search", {"value": value})
+    assert result["arguments"]["value"] is value
+    span = next(s for s in exporter.get_finished_spans() if s.name == "tools/call search")
+    assert "gen_ai.tool.call.arguments" not in (span.attributes or {})
+    assert "gen_ai.tool.call.result" not in (span.attributes or {})
+    assert len([r for r in caplog.records if "Could not serialize tool content" in r.message]) == 2
+
+
+async def test_custom_adapter_content_supports_datetime(exporter: InMemorySpanExporter) -> None:
+    timestamp = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
+    async with MCPRuntime(tracer_provider=traced(exporter)) as runtime:
+        await runtime.register_server("crm", adapter, refresh=ON_REGISTER)
+        result = await runtime.execute("crm:tool:search", {"at": timestamp})
+    assert result["arguments"]["at"] == timestamp
+    span = next(s for s in exporter.get_finished_spans() if s.name == "tools/call search")
+    attributes = span.attributes or {}
+    arguments = attributes["gen_ai.tool.call.arguments"]
+    assert isinstance(arguments, str)
+    assert json.loads(arguments) == {"at": "2026-01-02T03:04:05Z"}
+
+
+async def test_explicit_interceptor_controls_its_content_capture(
+    exporter: InMemorySpanExporter,
+) -> None:
+    interceptor = OpenTelemetryInterceptor(
+        tracer_provider=traced(exporter), capture_tool_content=False
+    )
+    async with MCPRuntime(interceptors=[interceptor]) as runtime:
+        await runtime.register_server("crm", adapter, refresh=ON_REGISTER)
+        await runtime.execute("crm:tool:search", {"q": "private"})
+    span = next(s for s in exporter.get_finished_spans() if s.name == "tools/call search")
+    assert "gen_ai.tool.call.arguments" not in (span.attributes or {})
+    assert "gen_ai.tool.call.result" not in (span.attributes or {})
 
 
 async def test_an_explicit_interceptor_replaces_the_default(
@@ -219,3 +292,5 @@ def test_tracing_options_are_validated() -> None:
         MCPRuntime(tracer_provider=object())  # type: ignore[arg-type]
     with pytest.raises(ConfigurationError, match="tracing must be one of"):
         MCPRuntime(tracing="verbose")  # type: ignore[arg-type]
+    with pytest.raises(ConfigurationError, match="capture_tool_content"):
+        MCPRuntime(capture_tool_content="false")  # type: ignore[arg-type]

@@ -17,8 +17,8 @@
     {
       "id": 3,
       "prompt": "Add read-only result caching and OpenTelemetry traces to the router without leaking tool arguments.",
-      "expected_output": "Default router tracing with an application-owned tracer provider, ToolResultCache for safe reads, and application-owned cache storage.",
-      "assertions": ["Relies on the default tracing with the otel extra's SDK, or passes tracer_provider, instead of adding a second OpenTelemetryInterceptor", "Caches safe reads only and documents invalidation", "Closes application-owned providers and stores"]
+      "expected_output": "Router tracing with capture_tool_content=False, an application-owned tracer provider, ToolResultCache for safe reads, and application-owned cache storage.",
+      "assertions": ["Disables tool content capture on the router or the explicitly supplied interceptor and notes other instrumentation may record content", "Caches safe reads only and documents invalidation", "Closes application-owned providers and stores"]
     },
     {
       "id": 4,

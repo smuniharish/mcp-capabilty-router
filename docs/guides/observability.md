@@ -132,9 +132,27 @@ runtime = MCPRuntime()
 Pass `tracer_provider=` to the runtime instead of using the global provider. Each
 operation records one client span, named after the MCP method and its target, such
 as `tools/call search_docs`. Spans include the method, server ID, and tool name,
-prompt name, or resource URI, never arguments or results. Errors set the span
-status and record the exception. The span covers every retry attempt and the other
-interceptors, including cache hits.
+prompt name, or resource URI. For tool calls, the router also records arguments
+and results as JSON in `gen_ai.tool.call.arguments` and `gen_ai.tool.call.result`.
+Langfuse recognizes these attributes as the tool observation's input and output.
+The result includes the adapter's full return value, including FastMCP content
+blocks and structured content. Errors set the span status and record the
+exception; a failed call has no result attribute. The span covers every retry
+attempt and the other interceptors, including cache hits.
+
+**Tool content may contain secrets or personal data and is captured by default.**
+Set `capture_tool_content=False` to omit both attributes from router spans:
+
+```python
+runtime = MCPRuntime(capture_tool_content=False)
+```
+
+The option applies to router spans only. FastMCP, the MCP SDK, remote servers,
+other instrumentation, and exception messages may record data independently;
+configure them and your collector separately to meet your privacy requirements.
+Prompt arguments and resource contents are not captured by the router. If a
+tool's arguments or result cannot be serialized as JSON, the router logs a
+warning and omits that attribute without changing the tool call's outcome.
 
 FastMCP, which connects to the servers, records spans of its own for the same
 operations. The `tracing` option chooses which spans to keep, so each call appears
@@ -161,7 +179,8 @@ scope if it is not wanted. The router's scope is
 
 To choose the tracer or the interceptor's position in the chain, pass an
 `OpenTelemetryInterceptor` among the runtime's `interceptors`; the runtime then
-adds no other:
+adds no other. An explicit interceptor controls its own content capture; configure
+`OpenTelemetryInterceptor(capture_tool_content=False)` to disable it:
 
 ```python
 from opentelemetry import trace
