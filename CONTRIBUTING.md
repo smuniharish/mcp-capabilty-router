@@ -120,12 +120,24 @@ describe the current public API. After changing the API or either skill, follow
 
 ## Releases
 
-1. Update `__version__` in `src/mcp_capability_router/__init__.py`, both skills'
-   `metadata.version`, and `CHANGELOG.md`.
-2. Merge the changes into `master` after continuous integration passes.
-3. Push a `vX.Y.Z` tag. The release workflow checks that the tag matches the package
-   version, runs the checks, and publishes to PyPI with trusted publishing and
-   attestations.
+Releases are published manually and follow [semantic versioning](https://semver.org/):
+
+1. Set the version in `pyproject.toml` and `metadata.version` in both Agent Skills,
+   then run `uv lock`. A test fails until the versions match.
+2. Move the changelog entries under a heading with the version.
+3. Merge the changes into `master` after continuous integration passes, then tag the
+   commit with the version and a `v` prefix, such as `v1.0.1`, and push the tag.
+4. Build and check the distributions from a clean checkout of the tag:
+
+   ```bash
+   uv build
+   uv run twine check --strict dist/*
+   uv run python scripts/validate_distribution.py dist --python 3.12 --python 3.15
+   ```
+
+5. Upload them with `uv publish`, supplying a PyPI API token through
+   `UV_PUBLISH_TOKEN`; never commit the token.
+6. Publish a GitHub release for the tag with the changelog entries.
 
 ## License
 
