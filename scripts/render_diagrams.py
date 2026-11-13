@@ -23,7 +23,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DIAGRAMS = ROOT / "docs" / "assets" / "diagrams"
-MERMAID_CLI = "@mermaid-js/mermaid-cli@12.0.0"
+MERMAID_CLI = "@mermaid-js/mermaid-cli@12.2.0"
 THEMES = {"light": "default", "dark": "dark"}
 MERMAID_CONFIG = {
     "fontFamily": "'Segoe UI', Roboto, Helvetica, Arial, sans-serif",

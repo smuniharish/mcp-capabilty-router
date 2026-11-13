@@ -59,7 +59,7 @@ current turn, however many servers and tools you register.
 - **Application-owned infrastructure.** Supply refresh StateStores, event publishers,
   fingerprints, FastMCP clients, Qdrant clients, embedders, or result-cache stores.
   Share the index in a Qdrant server, share circuits in Redis, and export
-  OpenTelemetry spans.
+  OpenTelemetry spans, recorded by default with no duplicates.
 
 ## Installation
 
@@ -70,7 +70,7 @@ pip install mcp-capability-router
 ```
 
 Extras add optional integrations: `langchain` for LangChain, LangGraph, and Deep
-Agents, `codemode` for the gateway's code mode, `otel` for OpenTelemetry, `redis` for
+Agents, `codemode` for the gateway's code mode, `otel` for the OpenTelemetry SDK and metrics, `redis` for
 Redis circuit storage, and `all` for every one of them, such as
 `pip install "mcp-capability-router[langchain,otel]"`. Configure resilience with `MCPRuntime(resilience=ResiliencePolicy(...))`;
 individual registrations can supply their own policy.

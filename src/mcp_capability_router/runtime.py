@@ -76,8 +76,10 @@ from .tools import RoutedTool
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
+    from opentelemetry.trace import TracerProvider
 
     from .gateway import GatewayMode
+    from .otel import TracingMode
 
 logger = logging.getLogger("mcp_capability_router")
 
@@ -154,6 +156,8 @@ class MCPRuntime:
         interceptors: Iterable[InterceptorLike] = (),
         metrics: MetricsSink | None = None,
         state_store_factory: StateStoreFactory | None = None,
+        tracing: TracingMode = "router",
+        tracer_provider: TracerProvider | None = None,
     ) -> None:
         """Create a runtime.
 
@@ -177,6 +181,13 @@ class MCPRuntime:
                 registered without a `RefreshPolicy.state_store`, called with the
                 server ID at registration. It may be an async function. The state
                 lives in memory when `None`.
+            tracing: Which client spans server operations record: `"router"`
+                records one span per operation and suppresses FastMCP's client
+                spans for it, `"fastmcp"` leaves tracing to FastMCP, `"all"`
+                records both, and `"off"` records neither. Spans are recorded
+                only once the application configures an OpenTelemetry SDK.
+            tracer_provider: The OpenTelemetry tracer provider of the router's
+                spans; the global tracer provider when `None`.
 
         Raises:
             ConfigurationError: If an argument is invalid.
@@ -204,6 +215,8 @@ class MCPRuntime:
             policy=resilience if resilience is not None else ResiliencePolicy(),
             interceptors=interceptors,
             metrics_sink=metrics,
+            tracing=tracing,
+            tracer_provider=tracer_provider,
         )
         self._metrics = metrics
         self._state_store_factory = state_store_factory

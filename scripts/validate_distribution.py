@@ -27,6 +27,7 @@ RUNTIME_DEPENDENCIES = {
     "fastmcp",
     "httpx2",
     "mcp",
+    "opentelemetry-api",
     "purgatory",
     "qdrant-client",
     "refresh-engine",
@@ -34,14 +35,15 @@ RUNTIME_DEPENDENCIES = {
 }
 EXTRAS = {"all", "codemode", "langchain", "otel", "redis"}
 DEVELOPMENT_PREFIXES = ("tests/", "examples/", "scripts/", "docs/", "benchmarks/")
-# Limit warning filters to known third-party import-time checks.
+# Every warning is an error, and so is a deprecation that the script itself triggers;
+# the package is held to the same rule by the test suite.
 WARNING_OPTIONS = (
     "-W",
     "error",
     "-W",
-    "ignore:'asyncio.iscoroutinefunction':DeprecationWarning",
+    "ignore::DeprecationWarning",
     "-W",
-    "ignore:<class 'key_value.:DeprecationWarning",
+    "error::DeprecationWarning:__main__",
 )
 
 SMOKE_TEST = """

@@ -257,8 +257,8 @@ examples/14_stdio_servers.py
 
 ## OpenTelemetry
 
-Install the `otel` extra. By default the example inspects spans and metrics in
-memory. Set `OTEL_EXPORTER_OTLP_ENDPOINT` to export to an OTLP collector; configure
+Install the `otel` extra. The runtime traces every operation by default; the
+example prints the span tree and metrics from memory. Set `OTEL_EXPORTER_OTLP_ENDPOINT` to export to an OTLP collector; configure
 TLS using the standard OpenTelemetry environment variables.
 
 === "Program"

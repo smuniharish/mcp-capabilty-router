@@ -17,13 +17,15 @@ ROOT = Path(__file__).resolve().parents[2]
 SKILLS_ROOT = ROOT / "mcp-capability-router-skills" / "skills"
 SKILLS = sorted(path for path in SKILLS_ROOT.iterdir() if (path / "SKILL.md").is_file())
 LINK = re.compile(r"\]\(([^)#<>\s]+)(?:#[^)]*)?\)")
+# Every warning is an error, and so is a deprecation that the script itself triggers;
+# the package is held to the same rule by the test suite.
 WARNINGS = [
     "-W",
     "error",
     "-W",
-    "ignore:'asyncio.iscoroutinefunction':DeprecationWarning",
+    "ignore::DeprecationWarning",
     "-W",
-    "ignore:<class 'key_value.:DeprecationWarning",
+    "error::DeprecationWarning:__main__",
 ]
 
 

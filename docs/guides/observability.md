@@ -114,24 +114,67 @@ async def unhealthy_servers() -> list[str]:
 
 ## Tracing
 
-LangChain tracing, such as LangSmith, records routed agent tool calls. Trace all
-server operations with the optional MCP client-span interceptor:
+The runtime traces every server operation with OpenTelemetry, with no extra to
+install. Tracing uses only the OpenTelemetry API, so nothing is recorded until the
+application configures an SDK. Install `mcp-capability-router[otel]` for the SDK,
+then set a tracer provider:
 
 ```python
+from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
+
+from mcp_capability_router import MCPRuntime
+
+trace.set_tracer_provider(TracerProvider())
+runtime = MCPRuntime()
+```
+
+Pass `tracer_provider=` to the runtime instead of using the global provider. Each
+operation records one client span, named after the MCP method and its target, such
+as `tools/call search_docs`. Spans include the method, server ID, and tool name,
+prompt name, or resource URI, never arguments or results. Errors set the span
+status and record the exception. The span covers every retry attempt and the other
+interceptors, including cache hits.
+
+FastMCP, which connects to the servers, records spans of its own for the same
+operations. The `tracing` option chooses which spans to keep, so each call appears
+once:
+
+| `tracing` | Spans recorded |
+| --- | --- |
+| `"router"` (default) | One router span per operation; FastMCP's spans within it are suppressed |
+| `"fastmcp"` | FastMCP's spans only, as without the router |
+| `"all"` | The router span with FastMCP's spans nested in it, for debugging |
+| `"off"` | Neither router nor FastMCP spans |
+
+```python
+runtime = MCPRuntime(tracing="off")
+```
+
+In every mode the runtime propagates the trace context to servers, so spans that a
+remote server records nest under the operation. In-process servers share the
+caller's context, so their FastMCP spans follow the same mode. The MCP SDK
+records a short `MCP send <method>` transport span under each operation, with the
+instrumentation scope `mcp-python-sdk`; drop it in the collector or exporter by
+scope if it is not wanted. The router's scope is
+[`INSTRUMENTATION_NAME`](../api/extensions.md), `mcp_capability_router`.
+
+To choose the tracer or the interceptor's position in the chain, pass an
+`OpenTelemetryInterceptor` among the runtime's `interceptors`; the runtime then
+adds no other:
+
+```python
+from opentelemetry import trace
 
 from mcp_capability_router import MCPRuntime
 from mcp_capability_router.otel import OpenTelemetryInterceptor
 
-provider = TracerProvider()
-runtime = MCPRuntime(interceptors=[OpenTelemetryInterceptor(provider.get_tracer("my-service"))])
+runtime = MCPRuntime(interceptors=[OpenTelemetryInterceptor(trace.get_tracer("my-service"))])
 ```
 
-Spans include the method, server ID, and tool name or resource URI, never arguments
-or results. Errors set the span status and record the exception. Add the tracing
-interceptor before caching to include cache hits in the operation span.
+LangChain tracing, such as LangSmith, also records routed agent tool calls.
 
 Providers, exporters, and their shutdown belong to the application. The
-[OpenTelemetry example](../examples.md#opentelemetry) shows in-memory inspection
-and OTLP export to a collector. Configure a metrics reader and a span processor
-before routing calls.
+[OpenTelemetry example](../examples.md#opentelemetry) prints the span tree in
+memory and exports to an OTLP collector. Configure a metrics reader and a span
+processor before routing calls.

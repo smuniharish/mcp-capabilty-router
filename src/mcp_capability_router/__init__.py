@@ -1,14 +1,14 @@
 """Framework-agnostic, asyncio-first capability routing for MCP tools, resources, and prompts.
 
 Every public name of the core is importable from this package. The OpenTelemetry
-interceptor lives in `mcp_capability_router.otel` (the `otel` extra), framework
-integrations in `mcp_capability_router.integrations` (for example the `langchain`
-extra), and the conformance tests in `mcp_capability_router.testing`.
+interceptor lives in `mcp_capability_router.otel`, framework integrations in
+`mcp_capability_router.integrations` (for example the `langchain` extra), and the
+conformance tests in `mcp_capability_router.testing`.
 """
 
 import logging
-from importlib.metadata import PackageNotFoundError, version
 
+from ._internal.version import VERSION
 from .adapters import FastMCPAdapter, FastMCPTarget
 from .contracts import (
     AdapterFactory,
@@ -56,6 +56,7 @@ from .models import (
     Tool,
     make_capability_id,
 )
+from .otel import TracingMode
 from .refresh import RefreshEventSource, RefreshPolicy
 from .registry import InMemoryRegistry
 from .resilience import (
@@ -68,10 +69,7 @@ from .retrieval import Embedder, Fusion, QdrantRetriever, RetrievalMode, documen
 from .runtime import CapabilityFilter, MCPRuntime, StateStoreFactory
 from .tools import RoutedTool
 
-try:
-    __version__ = version("mcp-capability-router")
-except PackageNotFoundError:  # pragma: no cover - only without installed metadata
-    __version__ = "0.0.0"
+__version__ = VERSION
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
@@ -134,6 +132,7 @@ __all__ = [
     "Tool",
     "ToolExecutionError",
     "ToolResultCache",
+    "TracingMode",
     "__version__",
     "categorize_failure",
     "document_text",

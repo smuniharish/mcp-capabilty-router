@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "mcp-capability-router"
-version = "1.0.0"
+version = "1.0.1"
 description = "Framework-agnostic, asyncio-first capability routing for MCP tools, resources, and prompts."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -45,10 +45,11 @@ classifiers = [
 dependencies = [
   "aiolimiter>=1.3.0,<2",
   "anyio>=4.16.0,<5",
-  "fastmcp>=4.1.6,<5",
+  "fastmcp>=4.1.8,<5",
   "httpx2>=2.16.0,<3",
   "mcp>=2.3.0,<3",
-  "purgatory>=3.0.1,<4",
+  "opentelemetry-api>=1.45.2,<2",
+  "purgatory>=3.0.2,<4",
   "qdrant-client>=1.20.0,<2",
   "refresh-engine>=1.0.0,<2",
   "tenacity>=9.2.1,<10",
@@ -56,16 +57,15 @@ dependencies = [
 
 [project.optional-dependencies]
 langchain = [
-  "langchain>=1.4.9,<2",
-  "langchain-core>=1.7.6,<2",
+  "langchain>=1.5.0,<2",
+  "langchain-core>=1.8.0,<2",
 ]
-codemode = ["fastmcp[code-mode]>=4.1.6,<5"]
+codemode = ["fastmcp[code-mode]>=4.1.8,<5"]
 otel = [
-  "opentelemetry-api>=1.45.2,<2",
   "opentelemetry-sdk>=1.45.2,<2",
   "refresh-engine[otel]>=1.0.0,<2",
 ]
-redis = ["purgatory[redis]>=3.0.1,<4"]
+redis = ["purgatory[redis]>=3.0.2,<4"]
 all = ["mcp-capability-router[codemode,langchain,otel,redis]"]
 
 [project.urls]
@@ -77,28 +77,28 @@ Repository = "https://github.com/smuniharish/mcp-capabilty-router"
 
 [dependency-groups]
 test = [
-  "coverage[toml]>=7.17.2",
+  "coverage[toml]>=7.17.3",
   "hypothesis>=6.170.15",
   "pytest>=9.2.0",
-  "pytest-asyncio>=1.4.1.post1",
+  "pytest-asyncio>=1.5.0",
   "pytest-cov>=7.1.0",
   "pytest-timeout>=2.4.0",
   "skills-ref>=0.1.1,<1",
 ]
-lint = ["ruff>=0.17.4"]
+lint = ["ruff>=0.17.5"]
 types = ["pyrefly>=1.4.1"]
 docs = [
   "griffe-pydantic>=1.3.2,<2",
-  "mkdocstrings-python>=2.0.10,<3",
-  "zensical>=0.1.0,<0.2",
+  "mkdocstrings-python>=2.0.11,<3",
+  "zensical>=0.1.1,<0.2",
 ]
 examples = [
   "asyncpg>=0.32.0,<1",
-  "deepagents>=0.7.34,<1",
+  "deepagents>=0.7.37,<1",
   "langchain-openai>=1.7.4,<2",
-  "langgraph>=1.2.20,<2",
+  "langgraph>=1.2.21,<2",
   "langgraph-swarm>=0.1.0,<1",
-  "openai>=3.46.0,<4",
+  "openai>=3.50.0,<4",
   "opentelemetry-exporter-otlp-proto-grpc>=1.45.2,<2",
   "prometheus-client>=0.26.0,<1",
 ]
@@ -127,11 +127,11 @@ addopts = ["-ra", "--strict-markers", "--strict-config"]
 testpaths = ["tests"]
 xfail_strict = true
 filterwarnings = [
+  # Every warning is an error, and so is a deprecation that the package or its tests
+  # trigger; deprecations raised inside third-party code are not this project's.
   "error",
-  # langsmith, a LangChain dependency, calls asyncio.iscoroutinefunction at import time.
-  "ignore:'asyncio.iscoroutinefunction':DeprecationWarning:langsmith",
-  # py-key-value's runtime type checks emit this on Python 3.15.
-  "ignore:.*isn't explicitly decorated with @runtime_checkable",
+  "ignore::DeprecationWarning",
+  "error::DeprecationWarning:(mcp_capability_router|tests)(\\.|$)",
 ]
 markers = [
   "live: tests requiring explicitly configured external services",

@@ -53,7 +53,22 @@ states = {server: str(await runtime.health(server)) for server in runtime.server
 
 ## Tracing
 
-LangChain tracing records routed tool calls like any tool call. Trace server
-operations with `mcp_capability_router.otel.OpenTelemetryInterceptor`, supplied with
-an application-owned tracer. Install the `otel` extra. Arguments and results are
-not recorded. Configure and shut down providers in the application.
+The runtime traces every server operation by default through the OpenTelemetry API;
+spans appear once the application configures an SDK (the `otel` extra installs it)
+globally or passes `MCPRuntime(tracer_provider=...)`. Each operation records one
+client span, such as `tools/call search_docs`, with scope `mcp_capability_router`.
+Arguments and results are not recorded.
+
+`MCPRuntime(tracing=...)` chooses the spans, so each call appears once:
+
+- `"router"` (default): router spans; FastMCP's spans within them are suppressed.
+- `"fastmcp"`: FastMCP's spans only.
+- `"all"`: both, nested, for debugging.
+- `"off"`: neither.
+
+The trace context reaches servers in every mode. The MCP SDK's `MCP send ...`
+transport spans (scope `mcp-python-sdk`) remain; filter them by scope in the
+collector. Pass an `OpenTelemetryInterceptor` among `interceptors` to choose the
+tracer or its position; the runtime then adds none. LangChain tracing records
+routed tool calls like any tool call. Configure and shut down providers in the
+application.

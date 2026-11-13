@@ -11,23 +11,30 @@ import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from fastmcp.telemetry import suppress_fastmcp_telemetry
 from purgatory import AsyncCircuitBreakerFactory
 from purgatory.domain.model import CLOSED, HALF_OPENED, OPENED, OpenedState
 
 from ..contracts import Interceptor, InterceptorLike, Operation, OperationContext
 from ..errors import CircuitOpenError, ConfigurationError
 from ..models import HealthState, Tool
+from ..otel import OpenTelemetryInterceptor
 from ..resilience import ResiliencePolicy, is_retryable
 from . import metrics
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Iterable
 
+    from opentelemetry.trace import TracerProvider
     from purgatory.domain.model import Context
     from refresh_engine import MetricsSink
     from tenacity import AsyncRetrying
 
+    from ..otel import TracingMode
+
 logger = logging.getLogger("mcp_capability_router")
+
+_TRACING_MODES = ("router", "fastmcp", "all", "off")
 
 _SEVERITY = (
     HealthState.HEALTHY,
@@ -101,9 +108,10 @@ class OperationPipeline:
     """Runs server operations through every resilience stage.
 
     The stages wrap each other in this order, outermost first: the concurrency
-    limit of the server, the runtime-wide concurrency limit, the interceptors, the
-    circuit breaker of the server and operation, the retry policy, and, for every
-    attempt, the rate limiter and the timeout. Every operation also records metrics.
+    limit of the server, the runtime-wide concurrency limit, the interceptors
+    (led by the tracing interceptor of the tracing mode), the circuit breaker of
+    the server and operation, the retry policy, and, for every attempt, the rate
+    limiter and the timeout. Every operation also records metrics.
     """
 
     def __init__(
@@ -113,6 +121,8 @@ class OperationPipeline:
         policy: ResiliencePolicy,
         interceptors: Iterable[InterceptorLike],
         metrics_sink: MetricsSink | None,
+        tracing: TracingMode = "router",
+        tracer_provider: TracerProvider | None = None,
     ) -> None:
         """Validate and store the configuration."""
         if (
@@ -132,6 +142,16 @@ class OperationPipeline:
             ):
                 msg = f"interceptor {interceptor!r} is neither an Interceptor nor an async function"
                 raise ConfigurationError(msg)
+        if tracing not in _TRACING_MODES:
+            msg = f"tracing must be one of {', '.join(map(repr, _TRACING_MODES))}, got {tracing!r}"
+            raise ConfigurationError(msg)
+        # Created in every mode so that `tracer_provider` is always validated.
+        router_spans = OpenTelemetryInterceptor(tracer_provider=tracer_provider)
+        if tracing in ("router", "all") and not any(
+            isinstance(interceptor, OpenTelemetryInterceptor) for interceptor in chain
+        ):
+            chain = (router_spans, *chain)
+        self._suppress_fastmcp = tracing in ("router", "off")
         self._semaphore = asyncio.Semaphore(max_concurrency)
         self._policy = policy
         self._interceptors: tuple[InterceptorLike, ...] = chain
@@ -197,8 +217,14 @@ class OperationPipeline:
         outcome = "failure"
         try:
             limit = state.semaphore if state.semaphore is not None else contextlib.nullcontext()
-            async with limit, self._semaphore:
-                result = await self._intercept(state, context, action)
+            # FastMCP's own spans, in-process servers included, would repeat the
+            # router's span; the trace context still reaches the server.
+            scope = (
+                suppress_fastmcp_telemetry() if self._suppress_fastmcp else contextlib.nullcontext()
+            )
+            with scope:
+                async with limit, self._semaphore:
+                    result = await self._intercept(state, context, action)
         except CircuitOpenError:
             outcome = "rejected"
             raise

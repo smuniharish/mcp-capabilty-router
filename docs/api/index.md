@@ -23,7 +23,7 @@ from mcp_capability_router.integrations.langchain import CapabilityRoutingMiddle
 | [Integrations](integrations.md) | `CapabilityRoutingMiddleware`, `to_langchain_tool`, `mcp_client_tools`, `LangChainEmbedder`, and `VectorStoreRetriever` |
 | [Extension contracts](contracts.md) | `MCPAdapter`, `CapabilityRegistry`, `CapabilityRetriever`, `Interceptor`, `Operation`, and `OperationContext` |
 | [Resilience](resilience.md) | `ResiliencePolicy`, `FailureCategory`, `categorize_failure`, and `is_retryable` |
-| [Caching, tracing, and testing](extensions.md) | `ToolResultCache`, `ResultCacheStore`, `OpenTelemetryInterceptor`, and the conformance suites |
+| [Caching, tracing, and testing](extensions.md) | `ToolResultCache`, `ResultCacheStore`, `TracingMode`, `OpenTelemetryInterceptor`, `INSTRUMENTATION_NAME`, and the conformance suites |
 | [Exceptions](errors.md) | The exception hierarchy |
 
 The package follows [semantic versioning](https://semver.org). The names listed in

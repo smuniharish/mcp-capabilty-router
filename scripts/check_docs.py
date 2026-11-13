@@ -69,7 +69,7 @@ CONTRIBUTOR_DOCUMENTS = frozenset(
 PUBLIC = frozenset(mcp_capability_router.__all__) | {"__version__"}
 PUBLIC_MODULES = {
     "mcp_capability_router.integrations.langchain": frozenset(langchain_integration.__all__),
-    "mcp_capability_router.otel": frozenset({"OpenTelemetryInterceptor"}),
+    "mcp_capability_router.otel": frozenset({"INSTRUMENTATION_NAME", "OpenTelemetryInterceptor"}),
     "mcp_capability_router.testing": frozenset(
         {
             "CapabilityRegistryContract",
@@ -94,14 +94,15 @@ MARKDOWN_LINK = re.compile(
 )
 HTML_LINK = re.compile(r"\b(?:href|src|srcset)=\"(?P<target>[^\"]+)\"")
 INLINE_CODE = re.compile(r"`+[^`]*`+")
-# Limit warning filters to known third-party import-time checks.
+# Every warning is an error, and so is a deprecation that the script itself triggers;
+# the package is held to the same rule by the test suite.
 WARNING_OPTIONS = (
     "-W",
     "error",
     "-W",
-    "ignore:'asyncio.iscoroutinefunction':DeprecationWarning",
+    "ignore::DeprecationWarning",
     "-W",
-    "ignore:<class 'key_value.:DeprecationWarning",
+    "error::DeprecationWarning:__main__",
 )
 
 

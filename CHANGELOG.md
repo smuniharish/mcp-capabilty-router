@@ -6,6 +6,30 @@ All notable changes are recorded here using
 
 ## [Unreleased]
 
+## [1.0.1]
+
+### Added
+
+- The runtime traces every server operation with OpenTelemetry by default. The
+  OpenTelemetry API is a core dependency, so tracing needs no extra; spans are
+  recorded once the application configures an SDK.
+- `MCPRuntime(tracing=...)` chooses the recorded spans with a `TracingMode`:
+  `"router"` (the default) records one router span per operation and suppresses
+  FastMCP's spans within it, `"fastmcp"` records FastMCP's spans only, `"all"`
+  records both, and `"off"` records neither. Each call appears once in a trace.
+- `MCPRuntime(tracer_provider=...)` and
+  `OpenTelemetryInterceptor(tracer_provider=...)` record spans with an
+  application-owned provider instead of the global one.
+- `mcp_capability_router.otel.INSTRUMENTATION_NAME`, the scope of the router's
+  spans.
+
+### Changed
+
+- Router spans carry the package version in their instrumentation scope.
+- Dependencies are updated to their latest releases, including FastMCP 4.1.8 and
+  Redis 8.1.
+- The PyPI page shows the project logo.
+
 ## [1.0.0]
 
 ### Added
@@ -54,7 +78,8 @@ All notable changes are recorded here using
 
 - Initial release.
 
-[Unreleased]: https://github.com/smuniharish/mcp-capabilty-router/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/smuniharish/mcp-capabilty-router/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/smuniharish/mcp-capabilty-router/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/smuniharish/mcp-capabilty-router/releases/tag/v1.0.0
 [0.2.0]: https://github.com/smuniharish/mcp-capabilty-router/releases/tag/v0.2.0
 [0.1.0]: https://pypi.org/project/mcp-capability-router/0.1.0/

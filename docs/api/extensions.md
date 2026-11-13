@@ -6,7 +6,11 @@
 
 ::: mcp_capability_router.ToolResultCache
 
+::: mcp_capability_router.TracingMode
+
 ::: mcp_capability_router.otel.OpenTelemetryInterceptor
+
+::: mcp_capability_router.otel.INSTRUMENTATION_NAME
 
 ::: mcp_capability_router.testing.CapabilityRegistryContract
 

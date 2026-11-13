@@ -100,8 +100,8 @@ class Audit(Interceptor):
 runtime = MCPRuntime(interceptors=[Audit()])
 ```
 
-Use `AuthorizationError` to reject a call. Use the built-in
-`OpenTelemetryInterceptor` for tracing and `ToolResultCache` for read-only caching;
+Use `AuthorizationError` to reject a call. The runtime adds the
+built-in `OpenTelemetryInterceptor` for tracing; use `ToolResultCache` for read-only caching;
 see [Observability](observability.md) and [Customization](customization.md).
 
 ## Conformance tests

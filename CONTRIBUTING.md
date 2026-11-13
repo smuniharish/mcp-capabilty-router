@@ -49,9 +49,10 @@ uv run zensical build --strict
 uv run python scripts/check_site_links.py
 ```
 
-- Tests treat warnings as errors, and coverage must stay at 100% of lines and
-  branches. Exclude code from coverage only when it cannot run, such as the body of
-  an abstract method.
+- Tests treat warnings as errors, including any deprecation that the package, its
+  tests, examples, or scripts trigger; the project calls no deprecated API.
+  Coverage must stay at 100% of lines and branches. Exclude code from coverage only
+  when it cannot run, such as the body of an abstract method.
 - The core must work without any extra. The `core` job of continuous integration
   installs only the `test` group with `uv sync --no-default-groups --group test` and
   runs every test except those of the extras; see `.github/workflows/ci.yml`.

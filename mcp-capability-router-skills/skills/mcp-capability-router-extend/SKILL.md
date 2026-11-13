@@ -11,7 +11,7 @@ license: Apache-2.0
 compatibility: Python 3.12 or newer, mcp-capability-router 1.0, async backend APIs.
 metadata:
   author: S. Muni Harish
-  version: "1.0.0"
+  version: "1.0.1"
   documentation: https://mcp-capabilty-router.readthedocs.io/
 ---
 

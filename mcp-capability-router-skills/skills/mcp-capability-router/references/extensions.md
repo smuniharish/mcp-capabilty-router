@@ -17,7 +17,7 @@ Configure downstream objects directly:
 | FastMCP | Client options or configured `Client` | `register_mcp(**client_options)` or target |
 | FastMCP | Server options, transforms, providers | `as_mcp_server(**server_options)` |
 | qdrant-client | `AsyncQdrantClient` and collection | `QdrantRetriever(client=..., collection_name=...)` |
-| OpenTelemetry | Tracer and meter providers | `mcp_capability_router.otel`, `OpenTelemetryMetricsSink` |
+| OpenTelemetry | Tracer and meter providers, recorded spans | `MCPRuntime(tracing=..., tracer_provider=...)`, `mcp_capability_router.otel`, `OpenTelemetryMetricsSink` |
 | LangChain (extra) | Embeddings, vector store, compressor | `LangChainEmbedder`, `VectorStoreRetriever` |
 
 A policy's store takes precedence over the runtime factory. Partition durable
