@@ -440,6 +440,11 @@ class TestComponents:
         assert reranker.calls == 1
         await retriever.close()
 
+    @pytest.mark.filterwarnings(
+        "ignore:Exception ignored while finalizing database connection"
+        "|Exception ignored in. <sqlite3.Connection"
+        ":pytest.PytestUnraisableExceptionWarning"
+    )
     async def test_given_components_are_used_and_filtered(self) -> None:
         tokenizer = SimpleTokenizer()
         retriever = LoomRetriever(components=Components(tokenizer=tokenizer))
@@ -447,6 +452,9 @@ class TestComponents:
         assert capability_ids(ranked) == ["s:tool:send_email"]
         assert await retriever.retrieve("navigation", [tool("s", "navigate")], limit=1) == []
         await retriever.close()
+        del retriever
+        # Run SQLite's finalizers before this test's warning filter ends.
+        gc.collect()
 
     @pytest.mark.filterwarnings(
         "ignore:Exception ignored while finalizing database connection"
