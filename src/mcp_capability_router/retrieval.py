@@ -318,11 +318,10 @@ class LoomRetriever(CapabilityRetriever):
     configuration, including the ranking methods and their fusion.
 
     Keyword ranking works on words: identifiers such as `read_text_file` or
-    `getWeather` are split into words, plurals match their singular, and words
-    that share their first five letters match partly. A word in the name or
-    title weighs 3, in a tag 2, and in the description or resource URI 1. BM25
-    weighs each word by its inverse document frequency, so rare words count
-    more than words that most capabilities share.
+    `getWeather` are split into words, plurals match their singular, and closely
+    related word forms match partly. Words in the name or title count most, then
+    tags, then the description or resource URI, and rare words count more than
+    words that most capabilities share.
 
     Capabilities are indexed on first sight and re-indexed only when their text
     changes; the engine skips documents it already holds unchanged, so a

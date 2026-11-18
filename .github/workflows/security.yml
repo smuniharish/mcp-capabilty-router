@@ -39,5 +39,8 @@ jobs:
           uv run pip-audit --strict --disable-pip --no-deps --requirement "${RUNNER_TEMP}/runtime.txt"
       - name: Audit development dependencies
         run: |
-          uv export --all-groups --all-extras --no-emit-project --output-file "${RUNNER_TEMP}/all.txt"
+          uv export --all-groups --all-extras --no-emit-project --no-hashes --output-file "${RUNNER_TEMP}/all.txt"
+          # The models group installs PyTorch's CPU wheels, whose +cpu local versions
+          # PyPI doesn't list; audit the PyPI release that they are built from.
+          sed -i 's/+cpu//' "${RUNNER_TEMP}/all.txt"
           uv run pip-audit --strict --disable-pip --no-deps --requirement "${RUNNER_TEMP}/all.txt"

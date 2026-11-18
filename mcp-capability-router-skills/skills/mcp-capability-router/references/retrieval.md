@@ -58,9 +58,10 @@ runtime = MCPRuntime(retriever=retriever)
 ## How BM25 ranks
 
 - Identifiers are split into words: `read_text_file` and `readTextFile` both
-  contain `read`, `text`, and `file`. Plurals match their singular; words that
-  share their first five letters match partly.
-- Weights: name or title 3, tag 2, description or URI 1. Rare words count more.
+  contain `read`, `text`, and `file`. Plurals match their singular; closely
+  related word forms match partly.
+- Name or title words count most, then tags, then description or URI. Rare
+  words count more.
 - Equal scores order by capability ID, so rankings are deterministic.
 - It matches words, not meanings: `find` does not match `search`. Add an
   embedder for meaning.

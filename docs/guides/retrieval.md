@@ -55,19 +55,12 @@ needs no model, no service, and no tuning, and it is deterministic.
 
 It splits names and identifiers into words, so `read_text_file`, `readTextFile`, and
 `read-text-file` all contain `read`, `text`, and `file`. Plurals match their
-singular, and words that share their first five letters match partly, so
-`navigation` partly matches `navigate`. Common English stop words are ignored.
+singular, closely related word forms such as `navigation` and `navigate` match
+partly, and common English stop words are ignored.
 
-Each word is weighted by where it occurs:
-
-| Field | Weight |
-| --- | --- |
-| Name or title | 3 |
-| Tag | 2 |
-| Description or resource URI | 1 |
-
-BM25 then weighs each word by its inverse document frequency, so distinctive words
-count more than words that most capabilities share. Ties are broken by capability ID.
+Words in a capability's name or title count most, words in its tags count more than
+words in its description or resource URI, and distinctive words count more than
+words that most capabilities share. Ties are broken by capability ID.
 
 <!-- test -->
 ```python

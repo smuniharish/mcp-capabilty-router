@@ -14,7 +14,7 @@ All notable changes are recorded here using
   retriever. It ranks with a [RetrievalLoom](https://pypi.org/project/retrievalloom/)
   engine: BM25 without arguments, BM25 and dense rankings fused by reciprocal rank
   fusion with an `Embedder`, and optionally reordered by a RetrievalLoom reranker.
-  BM25 tokenization and field weights are unchanged.
+  Existing keyword matching behavior is retained.
 - **Breaking:** `RetrievalMode` and `Fusion` are removed. The ranking methods and
   their fusion are configured with a RetrievalLoom `EngineConfig` through
   `LoomRetriever(config=...)`.
@@ -26,9 +26,17 @@ All notable changes are recorded here using
 - Examples 08 and 18 load a LangChain embedding model or a local sentence-transformers
   model, and example 08 an optional cross-encoder reranker.
 - `qdrant-client` is no longer a direct dependency; RetrievalLoom installs it.
+- Minimum dependency versions are raised to their latest compatible releases:
+  fastmcp 4.2.1, httpx2 2.16.2, refresh-engine 1.0.1, langchain-core 1.8.2,
+  zensical 0.1.2, deepagents 0.7.39, langchain-openai 1.8.1, langgraph 1.2.22,
+  openai 3.55.0, and the build backend uv-build 0.13.9.
+- The architecture and retrieval documentation describe the runtime's behavior at
+  the level that integrations need, and the refresh flow diagram is simplified.
 
 ### Added
 
+- The Agent Skills guide lists the skills that RetrievalLoom, refresh-engine,
+  FastMCP, and LangChain publish, and how to install them.
 - `LoomRetriever(reranker=...)` reorders the fused matches, for example with a
   cross-encoder.
 - `LoomRetriever(resources=EngineResources(data_dir=...))` keeps the index in files

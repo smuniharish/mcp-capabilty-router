@@ -70,3 +70,27 @@ the same command, or replace the copied directory.
 
 Run `uv run pytest tests/skill` to validate both skills, their linked assets and
 evaluation fixtures, setup checks, and executable registry contract template.
+
+## Skills for related packages
+
+Several packages that mcp-capability-router builds on, or integrates with, publish
+their own Agent Skills. They are maintained by those projects, installed separately,
+and optional: install only the ones for the parts of the stack you work on.
+
+| Package | Used for | Skills | Install |
+| --- | --- | --- | --- |
+| [RetrievalLoom](https://github.com/smuniharish/retrievalloom) | Retrieval behind `LoomRetriever` | `retrievalloom`, `retrievalloom-extend` | `npx skills add smuniharish/retrievalloom` |
+| [refresh-engine](https://github.com/smuniharish/refresh-engine) | Change detection during refreshes | `refresh-engine`, `refresh-engine-extend` | `npx skills add https://github.com/smuniharish/refresh-engine/tree/master/refresh-engine-skills/skills/refresh-engine` |
+| [FastMCP](https://gofastmcp.com/getting-started/ai-assisted-development) | MCP transports and servers | `fastmcp-server`, `fastmcp-client-cli` | `npx skills add PrefectHQ/fastmcp --skill fastmcp-server` |
+| [LangChain](https://github.com/langchain-ai/langchain-skills) | The `langchain` extra, LangGraph, and Deep Agents | `langchain-build-agent`, `langchain-agent-tracing`, `langchain-agent-monitoring`, `langchain-eval-engineering` | `npx skills add langchain-ai/langchain-skills --skill '*'` |
+| [Pydantic](https://github.com/pydantic/pydantic) | Pydantic model design | `pydantic` | `npx skills add pydantic/pydantic --skill pydantic` |
+| [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) | MCP SDK testing conventions | `test-quality` | `npx skills add modelcontextprotocol/python-sdk --skill test-quality` |
+
+Pass `--skill` to choose individual skills, and `-g` to install them for your user.
+The refresh-engine command installs its core skill; replace the final `refresh-engine`
+with `refresh-engine-extend` for the extension skill. To install FastMCP's CLI skill,
+replace `fastmcp-server` with `fastmcp-client-cli`. LangChain also distributes its
+skills as a plugin for Claude Code, Codex, and Deep Agents Code; see its README for the
+plugin commands. These skills are optional agent instructions, not Python dependencies.
+Each project documents the versions its skills target, so update them alongside the
+package.

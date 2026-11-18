@@ -6,6 +6,7 @@ is set; these tests verify their wiring in every test run.
 
 from __future__ import annotations
 
+import gc
 import importlib.util
 import json
 import sys
@@ -53,7 +54,9 @@ async def test_semantic_retrieval(capsys: pytest.CaptureFixture[str]) -> None:
     )
 
 
-# qdrant-client's local persistence leaks the probe connection it opens on first use.
+# qdrant-client's local persistence, which RetrievalLoom uses for vectors in a data
+# directory, leaks the probe connection it opens on first use. Collect it here, while
+# the warning is filtered, instead of in whichever test runs next.
 @pytest.mark.filterwarnings(
     "ignore:Exception ignored while finalizing database connection"
     ":pytest.PytestUnraisableExceptionWarning"
@@ -66,6 +69,7 @@ async def test_durable_index(capsys: pytest.CaptureFixture[str], tmp_path: Path)
     assert lines[0].removeprefix("first") == lines[2].removeprefix("restarted")
     assert lines[1] != "first: embedded 0 capability texts"
     assert lines[3] == "restarted: embedded 0 capability texts"
+    gc.collect()
 
 
 async def test_agent_middleware(capsys: pytest.CaptureFixture[str]) -> None:

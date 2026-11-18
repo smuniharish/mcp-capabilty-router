@@ -55,7 +55,8 @@ INVOICES = {
 
 def crm_server() -> FastMCP:
     """A customer-relationship server with tools, a resource, and a prompt."""
-    server = FastMCP("crm")
+    # A fixed version keeps the server info, which spans record, independent of FastMCP's.
+    server = FastMCP("crm", version="1.0.0")
 
     @server.tool(tags={"customers"}, annotations={"readOnlyHint": True})
     def search_customers(query: str) -> list[dict[str, str]]:

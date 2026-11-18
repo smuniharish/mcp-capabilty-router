@@ -4,19 +4,16 @@ This page follows a server, a request, and a refresh through the runtime.
 
 ## Registering a server
 
-`register_server`, and `register_mcp` which calls it:
+`register_server`, and `register_mcp` which calls it, validates the server ID and
+the refresh policy, and stores the adapter factory without calling it: no connection
+is opened until an operation needs one. If the policy sets `on_register`, the server
+is refreshed before `register_server` returns, and a failed refresh undoes the
+registration. The interval schedule and change events that the policy asks for start
+afterwards.
 
-1. validates the server ID and the refresh policy, and reserves the ID;
-2. stores the adapter factory, without calling it;
-3. creates the server's refresh engine and circuit breakers;
-4. if the policy sets `on_register`, refreshes the server, and undoes the
-   registration if the refresh fails;
-5. starts the interval scheduler and the change-event watcher that the policy asks
-   for.
-
-If the server is unregistered, or the runtime closes, before these steps complete,
-the registration is undone and `register_server` raises. The ID stays reserved until
-an unregistration completes, so it cannot be registered again in the meantime.
+A registration that is interrupted by an unregistration or a shutdown is undone, and
+`register_server` raises. A server ID cannot be registered again until its previous
+server is fully closed.
 
 ## Routing a request
 
@@ -62,32 +59,24 @@ or `get_prompt` — runs through the resilience pipeline:
 ![Refresh flow](../assets/diagrams/refresh-flow-dark.png#only-dark)
 
 1. A trigger — a manual call, the registration, an interval, a change event, or a
-   query miss — asks the server's refresh engine for a refresh.
+   query miss — asks for a refresh of the server.
 2. Discovery lists the server's tools, resources, and prompts through the resilience
-   pipeline, as a `discover` operation. The first discovery of a registration also
-   removes the server's capabilities that an earlier registration stored in the
-   registry and the server no longer offers.
-3. refresh-engine fingerprints every capability and compares it with the state of the
-   last successful refresh, which each registration keeps in memory.
-4. Added and modified capabilities are stored in the registry, and removed ones are
-   deleted. After a failed discovery, nothing is deleted.
-5. A manual refresh returns the result or raises `RefreshError`. A refresh triggered
+   pipeline, as a `discover` operation.
+3. refresh-engine compares them with the last successful refresh, and only added,
+   modified, and removed capabilities are written to the registry. The first refresh
+   of a registration also removes capabilities that an earlier registration stored
+   and the server no longer offers. After a failed discovery, nothing is removed.
+4. A manual refresh returns the result or raises `RefreshError`. A refresh triggered
    in the background logs its failure, and the next trigger tries again.
 
 ## Shutting down
 
-`unregister_server` stops one server, and `close` stops all of them, concurrently.
-Each first waits for a registration of the server that is still in progress, which
-is then undone. For each server, the runtime:
-
-1. stops the change-event watcher;
-2. stops the interval scheduler;
-3. closes the refresh engine, waiting for a running refresh;
-4. closes the connection, after which operations that were still waiting fail
-   instead of connecting again;
-5. forgets its circuit breakers.
+`unregister_server` stops one server, and `close` stops all of them. Each waits for a
+registration that is still in progress, which is then undone, and for a running
+refresh. Background refreshes stop, the connection closes, and operations that were
+still waiting fail instead of connecting again.
 
 `unregister_server` also removes the server's capabilities from the registry. `close`
-then closes the registry and leaves the capabilities of a durable registry in place.
+closes the registry and leaves the capabilities of a durable registry in place.
 If closing anything fails, or `close` is cancelled, every other resource is still
 closed, and the errors are raised together as an exception group.

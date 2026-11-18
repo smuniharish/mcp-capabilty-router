@@ -140,9 +140,19 @@ Releases are published manually and follow [semantic versioning](https://semver.
    uv run python scripts/validate_distribution.py dist --python 3.12 --python 3.14
    ```
 
-5. Upload them with `uv publish`, supplying a PyPI API token through
-   `UV_PUBLISH_TOKEN`; never commit the token.
-6. Publish a GitHub release for the tag with the changelog entries.
+   Inspect the wheel and source archive contents before upload:
+
+   ```bash
+   python -m zipfile -l dist/mcp_capability_router-<version>-py3-none-any.whl
+   tar -tf dist/mcp_capability_router-<version>.tar.gz
+   ```
+
+5. Upload them manually with `uv publish`, supplying a PyPI API token through
+   `UV_PUBLISH_TOKEN`; never commit the token. CI does not publish packages.
+6. Publish a GitHub release manually for the tag with the changelog entries.
+
+The point-in-time dependency review, PyPI versions, selected versions, and sources are
+recorded in [DEPENDENCY_AUDIT.md](DEPENDENCY_AUDIT.md).
 
 ## License
 

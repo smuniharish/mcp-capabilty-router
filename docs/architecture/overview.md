@@ -76,17 +76,13 @@ model and no randomness, so routing can be tested exactly and explained.
    tool failures and timeouts reach the model as error messages instead of aborting
    the agent run.
 
-These guarantees are verified by unit, integration, and property-based tests,
-including a stateful test that compares the registry with an independent model across
-generated sequences of operations, and a property test that checks that refreshes
-converge the registry to what the server offers across generated changes,
-re-registrations, and leftovers of earlier registrations.
+These guarantees are verified by unit, integration, and property-based tests.
 
 ## Complexity
 
-`LoomRetriever` indexes each capability once and again only when its text
-changes, and searches its BM25 and dense indexes with RetrievalLoom, filtered to the
-candidates of each query. Discovery and change detection take *O(N)* time per server.
-Executing an operation adds constant overhead to the server call.
+`LoomRetriever` indexes each capability once, and again only when its text changes,
+and each query searches only its candidates. Discovery and change detection take
+*O(N)* time per server. Executing an operation adds constant overhead to the server
+call. See [Performance](../guides/performance.md) for measurements.
 
 See [Request lifecycle](lifecycle.md) for the steps of each operation.
