@@ -59,6 +59,7 @@ async def test_semantic_retrieval(capsys: pytest.CaptureFixture[str]) -> None:
 # the warning is filtered, instead of in whichever test runs next.
 @pytest.mark.filterwarnings(
     "ignore:Exception ignored while finalizing database connection"
+    "|Exception ignored in. <sqlite3.Connection"
     ":pytest.PytestUnraisableExceptionWarning"
 )
 async def test_durable_index(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
