@@ -5,14 +5,16 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
+import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from mcp_capability_router import QdrantRetriever, Tool
+from mcp_capability_router import LoomRetriever, Tool
 from mcp_capability_router.retrieval import _words
 
 if TYPE_CHECKING:
     import random
+    from collections.abc import Iterator
 
 WORDS = st.sampled_from(
     ["read", "file", "files", "search", "send", "email", "thread", "navigate", "notes"]
@@ -42,15 +44,21 @@ def catalogs(draw: st.DrawFn) -> list[Tool]:
 
 
 def retrieve(query: str, candidates: list[Tool], limit: int) -> list[str]:
-    async def run() -> list[str]:
-        retriever = QdrantRetriever()
-        try:
-            ranked = await retriever.retrieve(query, candidates, limit=limit)
-        finally:
-            await retriever.close()
-        return [capability.capability_id for capability in ranked]
+    ranked = RUNNER.run(RETRIEVER.retrieve(query, candidates, limit=limit))
+    return [capability.capability_id for capability in ranked]
 
-    return asyncio.run(run())
+
+# One engine serves every example, as in an application whose catalog changes
+# between queries; starting an engine per example would dominate the run time.
+RUNNER = asyncio.Runner()
+RETRIEVER = LoomRetriever()
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _close_retriever() -> Iterator[None]:
+    yield
+    RUNNER.run(RETRIEVER.close())
+    RUNNER.close()
 
 
 @given(st.text(max_size=60))

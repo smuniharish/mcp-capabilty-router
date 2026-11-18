@@ -12,19 +12,22 @@ benchmarks on your own hardware with `python benchmarks/bench_retrieval.py` and
 
 ### Retrieval
 
-Median latency of one query with `QdrantRetriever` and an in-process Qdrant index:
+Median latency of one query with `LoomRetriever` and its in-memory index, measured
+with CPython 3.14 on Windows:
 
-| Capabilities | BM25 (`mode="sparse"`) | Hybrid (`mode="hybrid"`) |
+| Capabilities | BM25 | Hybrid |
 | ---: | ---: | ---: |
-| 100 | 0.8 ms | 1.0 ms |
-| 1,000 | 7.5 ms | 6.0 ms |
-| 10,000 | 74 ms | 56 ms |
+| 100 | 18 ms | 30 ms |
+| 1,000 | 24 ms | 62 ms |
+| 10,000 | 60 ms | 210 ms |
 
-The first query over 10,000 capabilities also indexes them, which takes about
-0.7 s for BM25 and 0.85 s for hybrid ranking. Later queries index only the
-capabilities that changed. The hybrid benchmark uses a hash `Embedder` instead of a
-model, so it measures the search; a real embedding model adds one embedding call per
-query, and one per new or changed capability.
+The engine starts on the first query, which takes 1 to 2.5 s while RetrievalLoom
+inspects the host. The first query over 10,000 capabilities also indexes them,
+which takes about 10 s for BM25 and 22 s for hybrid ranking. Later queries index
+only the capabilities that changed. The hybrid benchmark uses a hash `Embedder`
+instead of a model, so it measures the search; a real embedding model adds one
+embedding call per query, and one per new or changed capability. With `BAAI/bge-m3`
+on a CPU, indexing 1,000 capabilities takes about 56 s and a query about 62 ms.
 
 ### Refresh and execution
 
@@ -38,9 +41,8 @@ query, and one per new or changed capability.
 
 **Narrow the candidates.** Retrieval time grows linearly with the number of
 candidates. Pass `type` and `server_id` when you know them, and scope agents to the
-servers they need. `QdrantRetriever` indexes each capability once and again only
-when its text changes. For large catalogs, point it at a Qdrant server, which filters
-by server and type inside the index.
+servers they need. `LoomRetriever` indexes each capability once and again only
+when its text changes, and searches only the candidates of each query.
 
 **Prefer change notifications to short intervals.** Every refresh lists the whole
 server, even when nothing changed. Refresh on `list_changed` notifications or on query
@@ -57,11 +59,13 @@ limit them separately with an interceptor.
 **Set timeouts.** A server that stops answering holds a concurrency slot until the
 operation times out. `operation_timeout` frees it.
 
-**Embed once.** In hybrid mode, `QdrantRetriever` embeds each capability once and
+**Embed once.** With an embedder, `LoomRetriever` embeds each capability once and
 again only when its text changes. Keep one retriever per runtime, and size
-`max_points` to your catalog, so that capabilities are not evicted and embedded
-again.
+`max_documents` to your catalog, so that capabilities are not evicted and embedded
+again. Give it a `data_dir` or a durable vector store so that a restarted process
+does not embed its catalog again.
 
-**Cold start.** Importing the package does not import LangChain or the Qdrant client;
-the Qdrant client is loaded with the first query, and LangChain only through
+**Cold start.** The RetrievalLoom engine starts with the first query, and takes a
+second or two; create runtimes once per process, not per request. Importing the
+package does not import LangChain, which is loaded only through
 `mcp_capability_router.integrations.langchain`.

@@ -292,7 +292,7 @@ class CapabilityRetrieverContract(_Contract, ABC):
 
     @abstractmethod
     async def make_retriever(self) -> CapabilityRetriever:
-        """Return a new, ready-to-use retriever."""
+        """Return a new, ready-to-use retriever; each test closes it when done."""
 
     def _run(self, scenario: Any) -> None:
         async def run() -> None:
@@ -301,7 +301,10 @@ class CapabilityRetrieverContract(_Contract, ABC):
                 isinstance(retriever, CapabilityRetriever),
                 f"{retriever!r} does not subclass CapabilityRetriever",
             )
-            await scenario(retriever)
+            try:
+                await scenario(retriever)
+            finally:
+                await retriever.close()
 
         self.run_scenario(run())
 

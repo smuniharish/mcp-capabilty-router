@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "mcp-capability-router"
-version = "1.0.2"
+version = "2.0.0"
 description = "Framework-agnostic, asyncio-first capability routing for MCP tools, resources, and prompts."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -22,8 +22,8 @@ keywords = [
   "langchain",
   "mcp",
   "model-context-protocol",
-  "qdrant",
   "resilience",
+  "retrievalloom",
   "routing",
   "tool-retrieval",
 ]
@@ -37,7 +37,6 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
-  "Programming Language :: Python :: 3.15",
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
   "Topic :: Software Development :: Libraries :: Python Modules",
   "Typing :: Typed",
@@ -51,8 +50,8 @@ dependencies = [
   "opentelemetry-api>=1.45.2,<2",
   "pydantic>=2.14.3,<3",
   "purgatory>=3.0.2,<4",
-  "qdrant-client>=1.20.0,<2",
   "refresh-engine>=1.0.0,<2",
+  "retrievalloom>=0.2.0,<0.3",
   "tenacity>=9.2.1,<10",
 ]
 
@@ -110,6 +109,7 @@ dev = [
   { include-group = "lint" },
   { include-group = "types" },
 ]
+models = ["sentence-transformers>=6.3.0,<7", "torch>=2.15.0,<3"]
 
 [tool.uv]
 default-groups = ["dev"]
@@ -117,10 +117,23 @@ default-groups = ["dev"]
 # refresh-engine requires. The override only applies to this project's development lock.
 override-dependencies = ["tenacity>=9.2.1,<10"]
 
+# The `models` group runs local models on the CPU; the default Linux wheels bundle CUDA.
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
 [tool.uv.build-backend]
 module-name = "mcp_capability_router"
 source-include = ["CHANGELOG.md", "tests/**"]
-source-exclude = ["tests/integration/test_examples.py", "tests/skill/**"]
+source-exclude = [
+  "tests/integration/test_examples.py",
+  "tests/integration/test_local_models.py",
+  "tests/skill/**",
+]
 
 [tool.pytest]
 minversion = "9.0"

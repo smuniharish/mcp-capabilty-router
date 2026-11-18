@@ -9,7 +9,7 @@ its capabilities, route requests to them, and hand the right tools to an agent.
 pip install mcp-capability-router
 ```
 
-The package requires Python 3.12 or newer and installs FastMCP, the Qdrant client,
+The package requires Python 3.12 or newer and installs FastMCP, RetrievalLoom,
 refresh-engine, and the resilience libraries. It needs no agent framework. For
 LangChain agents, install the `langchain` extra and the LangChain integration of your
 model provider:

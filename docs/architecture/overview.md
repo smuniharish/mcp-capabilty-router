@@ -84,9 +84,9 @@ re-registrations, and leftovers of earlier registrations.
 
 ## Complexity
 
-`QdrantRetriever` indexes each capability once and again only when its text
-changes, and searches its BM25 and dense vectors with Qdrant's inverted and HNSW
-indexes, filtering by server and type inside the index. Discovery and change detection take *O(N)* time per server.
+`LoomRetriever` indexes each capability once and again only when its text
+changes, and searches its BM25 and dense indexes with RetrievalLoom, filtered to the
+candidates of each query. Discovery and change detection take *O(N)* time per server.
 Executing an operation adds constant overhead to the server call.
 
 See [Request lifecycle](lifecycle.md) for the steps of each operation.

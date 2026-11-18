@@ -21,8 +21,8 @@ from pydantic import Field
 from mcp_capability_router import (
     CapabilityRetriever,
     ConfigurationError,
+    LoomRetriever,
     MCPRuntime,
-    QdrantRetriever,
     RefreshPolicy,
     RoutedTool,
     ServerConnectionError,
@@ -481,8 +481,8 @@ class TestLangChainEmbedder:
         with pytest.raises(ConfigurationError, match="does not subclass Embeddings"):
             LangChainEmbedder(object())  # type: ignore[arg-type]
 
-    async def test_powers_the_qdrant_retriever(self) -> None:
-        retriever = QdrantRetriever(embedder=LangChainEmbedder(WordEmbeddings()), mode="dense")
+    async def test_powers_the_loom_retriever(self) -> None:
+        retriever = LoomRetriever(embedder=LangChainEmbedder(WordEmbeddings()))
         assert capability_ids(await retriever.retrieve("weather", catalog(), limit=1)) == [
             "s:tool:forecast"
         ]

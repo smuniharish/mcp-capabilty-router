@@ -146,9 +146,12 @@ continuous integration. Most of them share this module:
 
 ## Semantic retrieval
 
-Requires the `langchain` extra and an embedding model: set
-`MCP_ROUTER_EXAMPLE_EMBEDDINGS`, such as `openai:text-embedding-3-small`, and the
-provider's credentials.
+Requires an embedding model: set `MCP_ROUTER_EXAMPLE_EMBEDDINGS`. Use a LangChain
+model, such as `openai:text-embedding-3-small`, with the `langchain` extra and the
+provider's credentials, or a local sentence-transformers model, such as
+`sentence-transformers:BAAI/bge-m3`, after `uv sync --group models`. Set
+`MCP_ROUTER_EXAMPLE_RERANKER`, such as `BAAI/bge-reranker-v2-m3`, to rerank with a
+cross-encoder. The example's `retrieval_models.py` module loads both.
 
 ```python
 --8<--
@@ -299,15 +302,16 @@ Two runtimes demonstrate cross-process cache hits and circuit state.
     --8<--
     ```
 
-## A shared Qdrant index
+## A durable capability index
 
-Requires a Qdrant server: set `MCP_ROUTER_EXAMPLE_QDRANT_URL`, such as
-`http://localhost:6333`. Set `MCP_ROUTER_EXAMPLE_EMBEDDINGS` as well, with the
-`langchain` extra, for hybrid rankings.
+Requires an embedding model: set `MCP_ROUTER_EXAMPLE_EMBEDDINGS`, as for semantic
+retrieval. The index persists in a data directory, so a restarted process embeds
+nothing again. Set `MCP_ROUTER_EXAMPLE_QDRANT_URL`, such as `http://localhost:6333`,
+to keep the vectors in a Qdrant server shared by processes.
 
 ```python
 --8<--
-examples/18_qdrant_server.py
+examples/18_durable_index.py
 --8<--
 ```
 

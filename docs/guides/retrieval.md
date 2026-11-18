@@ -30,23 +30,28 @@ with open circuits are excluded by default; `include_unhealthy=True` explicitly
 includes them. Retrieval predicates are not authorization checks: protect execution
 with an interceptor as well.
 
-## QdrantRetriever
+## LoomRetriever
 
-`QdrantRetriever` is the default retriever. It ranks with
-[Qdrant](https://qdrant.tech): BM25 on words, dense vectors from an embedding model,
-or both, fused.
+`LoomRetriever` is the default retriever. It ranks with a
+[RetrievalLoom](https://pypi.org/project/retrievalloom/) engine: BM25 on words,
+dense vectors from an embedding model, or both, fused, and optionally reranked.
 
 | Need | Configuration |
 | --- | --- |
-| Deterministic ranking with no model and no service | `QdrantRetriever()`: BM25 in an in-process collection |
-| Natural-language requests and synonyms | `QdrantRetriever(embedder=embedder)`: hybrid BM25 and dense |
-| Meaning only | `QdrantRetriever(embedder=embedder, mode="dense")` |
-| One index shared by every process | `QdrantRetriever(client=AsyncQdrantClient(url=...))` |
+| Deterministic ranking with no model and no service | `LoomRetriever()`: BM25 in memory |
+| Natural-language requests and synonyms | `LoomRetriever(embedder=embedder)`: hybrid BM25 and dense |
+| The best order among the matches | `LoomRetriever(embedder=embedder, reranker=reranker)` |
+| An index kept across restarts | `LoomRetriever(resources=EngineResources(data_dir=...))` |
+| One index shared by every process | `LoomRetriever(components=Components(vector_store=...))` |
+
+The engine starts on the first query, which takes a second or two: RetrievalLoom
+inspects the host before it serves. Create one retriever per process, through one
+runtime, and close it with the runtime.
 
 ### BM25
 
-Without arguments, the retriever keeps an in-process Qdrant collection and ranks
-with BM25. It needs no model, no service, and no tuning, and it is deterministic.
+Without arguments, the retriever keeps an in-memory index and ranks with BM25. It
+needs no model, no service, and no tuning, and it is deterministic.
 
 It splits names and identifiers into words, so `read_text_file`, `readTextFile`, and
 `read-text-file` all contain `read`, `text`, and `file`. Plurals match their
@@ -61,14 +66,14 @@ Each word is weighted by where it occurs:
 | Tag | 2 |
 | Description or resource URI | 1 |
 
-Qdrant then weighs each word by its inverse document frequency, so distinctive words
+BM25 then weighs each word by its inverse document frequency, so distinctive words
 count more than words that most capabilities share. Ties are broken by capability ID.
 
 <!-- test -->
 ```python
 import asyncio
 
-from mcp_capability_router import QdrantRetriever, Tool
+from mcp_capability_router import LoomRetriever, Tool
 
 
 def tool(name: str, description: str, *tags: str) -> Tool:
@@ -90,7 +95,7 @@ CATALOG = [
 
 
 async def main() -> None:
-    retriever = QdrantRetriever()
+    retriever = LoomRetriever()
     for query in (
         "read a file",
         "search files by name",
@@ -118,11 +123,11 @@ do not use, add an embedder, or write descriptions with the words users say.
 
 ### Hybrid ranking
 
-Give the retriever an `Embedder` and it ranks by meaning as well. Qdrant fuses the
-BM25 and dense rankings, with reciprocal rank fusion by default:
+Give the retriever an `Embedder` and it ranks by meaning as well. The engine fuses
+the BM25 and dense rankings by reciprocal rank fusion:
 
 ```python
-from mcp_capability_router import Embedder, MCPRuntime, QdrantRetriever
+from mcp_capability_router import Embedder, LoomRetriever, MCPRuntime
 
 
 class ServiceEmbedder(Embedder):
@@ -134,7 +139,7 @@ class ServiceEmbedder(Embedder):
         return vector
 
 
-runtime = MCPRuntime(retriever=QdrantRetriever(embedder=ServiceEmbedder()))
+runtime = MCPRuntime(retriever=LoomRetriever(embedder=ServiceEmbedder()))
 ```
 
 With the `langchain` extra, `LangChainEmbedder` adapts any LangChain embedding model:
@@ -142,51 +147,77 @@ With the `langchain` extra, `LangChainEmbedder` adapts any LangChain embedding m
 ```python
 from langchain.embeddings import init_embeddings
 
-from mcp_capability_router import QdrantRetriever
+from mcp_capability_router import LoomRetriever
 from mcp_capability_router.integrations.langchain import LangChainEmbedder
 
 embeddings = init_embeddings("openai:text-embedding-3-small")
-retriever = QdrantRetriever(embedder=LangChainEmbedder(embeddings))
+retriever = LoomRetriever(embedder=LangChainEmbedder(embeddings))
 ```
 
-- `fusion="dbsf"` selects distribution-based score fusion instead; `rrf_k` sets the
-  constant of reciprocal rank fusion.
-- `prefetch_limit`, 50 by default, bounds how many matches each ranking contributes.
 - Each capability is embedded from its title, name, description, tags, and URI
   (`document_text`), once, and again only when that text changes. Each query embeds
   the query text once.
+- `fetch_limit`, 50 by default, bounds how many matches the engine returns before
+  ties are broken.
+- `config` replaces the whole RetrievalLoom `EngineConfig`, including the ranking
+  methods, their fusion, and their weights.
 
-### A Qdrant server
+### Reranking
 
-Give the retriever an `AsyncQdrantClient` to keep the collection in a Qdrant server.
-Every process of a service then ranks against the same index, and capabilities that
-the collection already holds are not embedded again, even after a restart:
+Give the retriever a RetrievalLoom `RerankerABC` to reorder the fused matches with
+a cross-encoder, such as RetrievalLoom's `FlashRankReranker`. The
+[semantic retrieval example](../examples.md#semantic-retrieval) wraps a
+sentence-transformers `CrossEncoder`, such as `BAAI/bge-reranker-v2-m3`:
 
 ```python
-from qdrant_client import AsyncQdrantClient
+retriever = LoomRetriever(embedder=embedder, reranker=reranker)
+```
 
-from mcp_capability_router import QdrantRetriever
+A reranker scores each pair of query and capability, so it is slower than the
+rankings it reorders and best kept to a small `fetch_limit`.
 
-client = AsyncQdrantClient(url="http://localhost:6333")
-retriever = QdrantRetriever(
+### A durable or shared index
+
+`EngineResources` with a `data_dir` keeps the index in files. A restarted process
+finds its capabilities unchanged and embeds none of them again:
+
+```python
+from pathlib import Path
+
+from retrievalloom import EngineResources
+
+retriever = LoomRetriever(
     embedder=embedder,
-    client=client,
-    collection_name="support_capabilities",
+    resources=EngineResources(data_dir=Path("var/capability-index")),
 )
 ```
 
-- Give each catalog its own collection: capability IDs identify the points.
-- The retriever closes only a client that it created; close a client of your own
-  after the runtime.
-- `max_points`, 50,000 by default, bounds the indexed capabilities. When it is
+RetrievalLoom `Components` replace the engine's stores, for example with a Qdrant
+server that every process of a service ranks against:
+
+```python
+from qdrant_client import AsyncQdrantClient
+from retrievalloom import Components
+from retrievalloom.index.vector import QdrantVectorStore
+
+store = QdrantVectorStore(client=AsyncQdrantClient(url="http://localhost:6333"))
+retriever = LoomRetriever(
+    embedder=embedder,
+    components=Components(vector_store=store),
+    collection="support_capabilities",
+)
+```
+
+- Give each catalog its own `collection`: capability IDs identify the documents.
+- The retriever never closes components it is given; close them after the runtime.
+- `max_documents`, 50,000 by default, bounds the indexed capabilities. When it is
   exceeded, the capabilities that queries have not seen for the longest time are
   dropped; the candidates of the current query are always kept.
-- Each query searches only its candidates, filtered in Qdrant.
-
+- Each query searches only its candidates.
 ## LangChain vector stores
 
 With the `langchain` extra, `VectorStoreRetriever` ranks with any LangChain
-`VectorStore` instead of Qdrant, and can re-rank the best `fetch_k` matches with any
+`VectorStore` instead of RetrievalLoom, and can re-rank the best `fetch_k` matches with any
 LangChain document compressor, such as a cross-encoder or a provider reranker:
 
 ```python
@@ -196,7 +227,7 @@ retriever = VectorStoreRetriever(embeddings, reranker=reranker, fetch_k=30)
 retriever = VectorStoreRetriever(vector_store=store)
 ```
 
-`max_documents`, 50,000 by default, bounds the stored vectors as `max_points` does.
+`max_documents`, 50,000 by default, bounds the stored vectors as it does for `LoomRetriever`.
 
 ## Your own ranking
 

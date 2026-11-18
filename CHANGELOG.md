@@ -6,6 +6,53 @@ All notable changes are recorded here using
 
 ## [Unreleased]
 
+## [2.0.0]
+
+### Changed
+
+- **Breaking:** `LoomRetriever` replaces `QdrantRetriever` as the default
+  retriever. It ranks with a [RetrievalLoom](https://pypi.org/project/retrievalloom/)
+  engine: BM25 without arguments, BM25 and dense rankings fused by reciprocal rank
+  fusion with an `Embedder`, and optionally reordered by a RetrievalLoom reranker.
+  BM25 tokenization and field weights are unchanged.
+- **Breaking:** `RetrievalMode` and `Fusion` are removed. The ranking methods and
+  their fusion are configured with a RetrievalLoom `EngineConfig` through
+  `LoomRetriever(config=...)`.
+- **Breaking:** Python 3.15 is no longer supported.
+- The retriever conformance suite in `mcp_capability_router.testing` closes the
+  retriever after each test.
+- Example 18 is now `18_durable_index.py`: a capability index kept in a data
+  directory, or in a Qdrant server, that a restarted process does not embed again.
+- Examples 08 and 18 load a LangChain embedding model or a local sentence-transformers
+  model, and example 08 an optional cross-encoder reranker.
+- `qdrant-client` is no longer a direct dependency; RetrievalLoom installs it.
+
+### Added
+
+- `LoomRetriever(reranker=...)` reorders the fused matches, for example with a
+  cross-encoder.
+- `LoomRetriever(resources=EngineResources(data_dir=...))` keeps the index in files
+  across restarts.
+- A `models` dependency group with sentence-transformers and CPU-only PyTorch for
+  the examples, benchmarks, and live tests that use local models.
+
+### Migration
+
+| 1.x | 2.0 |
+| --- | --- |
+| `QdrantRetriever()` | `LoomRetriever()` |
+| `QdrantRetriever(embedder=e)` | `LoomRetriever(embedder=e)` |
+| `QdrantRetriever(embedder=e, mode="dense")` | `LoomRetriever(embedder=e, config=...)` with keyword ranking disabled |
+| `QdrantRetriever(client=c, collection_name=n)` | `LoomRetriever(components=Components(vector_store=QdrantVectorStore(client=c)), collection=n)` |
+| `max_points=...` | `max_documents=...` |
+| `prefetch_limit=...` | `fetch_limit=...` |
+| `fusion=...`, `rrf_k=...` | `config=EngineConfig(...)` |
+
+The RetrievalLoom engine starts with the first query and takes a second or two to
+inspect the host, so create one runtime per process rather than per request.
+Indexes written by `QdrantRetriever` are not read by `LoomRetriever`; capabilities
+are indexed again on first sight.
+
 ## [1.0.2]
 
 ### Added
@@ -86,7 +133,8 @@ All notable changes are recorded here using
 
 - Initial release.
 
-[Unreleased]: https://github.com/smuniharish/mcp-capabilty-router/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/smuniharish/mcp-capabilty-router/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/smuniharish/mcp-capabilty-router/compare/v1.0.2...v2.0.0
 [1.0.2]: https://github.com/smuniharish/mcp-capabilty-router/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/smuniharish/mcp-capabilty-router/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/smuniharish/mcp-capabilty-router/releases/tag/v1.0.0

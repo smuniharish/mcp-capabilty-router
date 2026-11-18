@@ -5,7 +5,7 @@ Each guide covers one capability in depth, with runnable code.
 | Guide | Covers |
 | --- | --- |
 | [Connecting MCP servers](servers.md) | Transports, authentication, connection lifecycle, and custom adapters. |
-| [Retrieval](retrieval.md) | BM25 and hybrid ranking with Qdrant, vector stores, filters, and limits. |
+| [Retrieval](retrieval.md) | BM25, hybrid ranking, and reranking with RetrievalLoom, vector stores, filters, and limits. |
 | [Discovery and refresh](refresh.md) | Refresh policies, change notifications, targeted refreshes, and durable state. |
 | [Resilience](resilience.md) | Concurrency, interceptors, circuit breakers, retries, rate limits, and timeouts. |
 | [Metrics, logging, and health](observability.md) | Operation and refresh metrics, logs, events, and health states. |

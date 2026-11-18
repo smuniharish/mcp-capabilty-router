@@ -31,6 +31,9 @@ site/
 *.sqlite3
 .playwright-mcp/
 
+# Local model weights for the examples, live tests, and benchmarks
+models/
+
 # Secrets
 .env
 .env.*

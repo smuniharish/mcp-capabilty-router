@@ -65,7 +65,7 @@ from .resilience import (
     categorize_failure,
     is_retryable,
 )
-from .retrieval import Embedder, Fusion, QdrantRetriever, RetrievalMode, document_text
+from .retrieval import Embedder, LoomRetriever, document_text
 from .runtime import CapabilityFilter, MCPRuntime, StateStoreFactory
 from .tools import RoutedTool
 
@@ -92,7 +92,6 @@ __all__ = [
     "FailureCategory",
     "FastMCPAdapter",
     "FastMCPTarget",
-    "Fusion",
     "GatewayMode",
     "HealthState",
     "InMemoryRegistry",
@@ -101,6 +100,7 @@ __all__ = [
     "InterceptorFunction",
     "InterceptorLike",
     "InvalidRequestError",
+    "LoomRetriever",
     "MCPAdapter",
     "MCPCapabilityRouterError",
     "MCPRuntime",
@@ -110,7 +110,6 @@ __all__ = [
     "PromptArgument",
     "PromptRetrievalError",
     "ProtocolError",
-    "QdrantRetriever",
     "RateLimitError",
     "RefreshError",
     "RefreshEventSource",
@@ -119,7 +118,6 @@ __all__ = [
     "Resource",
     "ResourceReadError",
     "ResultCacheStore",
-    "RetrievalMode",
     "RoutedTool",
     "RouterProvider",
     "RouterSearchTransform",

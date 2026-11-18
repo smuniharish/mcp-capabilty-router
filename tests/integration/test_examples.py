@@ -13,16 +13,16 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
+import pytest
 from langchain_core.embeddings import DeterministicFakeEmbedding
 from langchain_core.messages import AIMessage
 from openai.types.chat import ChatCompletion
 
+from mcp_capability_router.integrations.langchain import LangChainEmbedder
 from tests.langchain_support import ScriptedChatModel
 
 if TYPE_CHECKING:
     from types import ModuleType
-
-    import pytest
 
 EXAMPLES = Path(__file__).resolve().parents[2] / "examples"
 
@@ -43,13 +43,29 @@ def call(name: str, args: dict[str, Any], call_id: str) -> dict[str, Any]:
 
 
 async def test_semantic_retrieval(capsys: pytest.CaptureFixture[str]) -> None:
-    await load("08_semantic_retrieval.py").main(DeterministicFakeEmbedding(size=32))
+    embedder = LangChainEmbedder(DeterministicFakeEmbedding(size=32))
+    await load("08_semantic_retrieval.py").main(embedder)
     lines = capsys.readouterr().out.splitlines()
     assert len(lines) == 3
     assert all(
         line.count(":tool:") + line.count(":resource:") + line.count(":prompt:") == 2
         for line in lines
     )
+
+
+# qdrant-client's local persistence leaks the probe connection it opens on first use.
+@pytest.mark.filterwarnings(
+    "ignore:Exception ignored while finalizing database connection"
+    ":pytest.PytestUnraisableExceptionWarning"
+)
+async def test_durable_index(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
+    embedder = LangChainEmbedder(DeterministicFakeEmbedding(size=32))
+    await load("18_durable_index.py").main(tmp_path, embedder)
+    lines = capsys.readouterr().out.splitlines()
+    assert len(lines) == 4
+    assert lines[0].removeprefix("first") == lines[2].removeprefix("restarted")
+    assert lines[1] != "first: embedded 0 capability texts"
+    assert lines[3] == "restarted: embedded 0 capability texts"
 
 
 async def test_agent_middleware(capsys: pytest.CaptureFixture[str]) -> None:

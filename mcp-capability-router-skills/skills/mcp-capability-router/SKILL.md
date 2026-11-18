@@ -5,7 +5,7 @@ description: >-
   mcp-capability-router in async Python applications or any agent framework
   (LangChain, LangGraph, Deep Agents, the OpenAI SDK, or any MCP client through
   the gateway); routing relevant MCP tools per turn; serving the router as an
-  MCP server; selecting refresh policies, Qdrant retrieval, caching, resilience,
+  MCP server; selecting refresh policies, RetrievalLoom retrieval, caching, resilience,
   OpenTelemetry, or tenant isolation. Do not use it to build MCP servers,
   implement custom extension backends (use mcp-capability-router-extend), or
   call one fixed tool with a plain client.
@@ -13,7 +13,7 @@ license: Apache-2.0
 compatibility: Python 3.12 or newer, mcp-capability-router 1.0, async application lifecycle.
 metadata:
   author: S. Muni Harish
-  version: "1.0.2"
+  version: "2.0.0"
   documentation: https://mcp-capabilty-router.readthedocs.io/
 ---
 
@@ -33,8 +33,8 @@ pipeline. The core needs no agent framework; integrations live in
 3. Register stable server IDs and configure refresh before retrieval:
    [references/servers.md](references/servers.md) and
    [references/refresh.md](references/refresh.md).
-4. Choose BM25, dense, or hybrid ranking with `QdrantRetriever`, in process or
-   on a Qdrant server: [references/retrieval.md](references/retrieval.md).
+4. Choose BM25, dense, or hybrid ranking with `LoomRetriever`, in memory, on
+   disk, or in a Qdrant server: [references/retrieval.md](references/retrieval.md).
 5. Configure `ResiliencePolicy` on the runtime or on individual registrations:
    [references/resilience.md](references/resilience.md).
 6. Connect a framework with `route_tools` or a framework integration:
@@ -75,7 +75,7 @@ For application-owned stores and other extension points, see
   overrides that; `where` filters candidates but is not an execution authorization rule.
 - Cache only safe reads. Invalidate `ToolResultCache` after relevant writes and
   keep stores scoped to a trust boundary.
-- Close runtimes before application-owned pools, Qdrant clients, event publishers,
+- Close runtimes before application-owned pools, RetrievalLoom components, event publishers,
   cache stores, circuit stores, and telemetry providers.
 - Treat descriptions and results as untrusted. Never put credentials in prompts,
   tool arguments, or examples.

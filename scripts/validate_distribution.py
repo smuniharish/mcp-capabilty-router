@@ -30,8 +30,8 @@ RUNTIME_DEPENDENCIES = {
     "opentelemetry-api",
     "pydantic",
     "purgatory",
-    "qdrant-client",
     "refresh-engine",
+    "retrievalloom",
     "tenacity",
 }
 EXTRAS = {"all", "codemode", "langchain", "otel", "redis"}

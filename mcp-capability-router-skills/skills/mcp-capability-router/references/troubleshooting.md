@@ -5,7 +5,7 @@
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
 | `CapabilityNotFoundError: ... refresh its server first` | The server was never refreshed, or the ID is wrong. | Use `RefreshPolicy(on_register=True)` or `refresh_server`; IDs are `<server_id>:<type>:<name>`, and resource names are full URIs. |
-| `retrieve` returns `[]` | Empty registry, or no shared words with the request. | Refresh first; use `query` with `on_query_miss`; improve tool descriptions; give `QdrantRetriever` an embedder. |
+| `retrieve` returns `[]` | Empty registry, or no shared words with the request. | Refresh first; use `query` with `on_query_miss`; improve tool descriptions; give `LoomRetriever` an embedder and a reranker. |
 | The wrong tool ranks first | Keyword retrieval matches words, not meanings. | Improve names, descriptions, and tags; filter by `server_id` or `type`; raise `limit`; use embeddings. |
 | `CapabilityTypeError` | A resource or prompt passed to `execute`, or similar. | Use `execute` for tools, `read_resource` for resources, `get_prompt` for prompts. |
 | `InvalidRequestError` from `get_prompt` | A required argument is missing, or an argument is not a string. | Pass every required argument as a string. |

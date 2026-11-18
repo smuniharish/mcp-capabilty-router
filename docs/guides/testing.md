@@ -43,8 +43,9 @@ async def test_routes_invoice_requests(runtime: MCPRuntime) -> None:
 ```
 
 Async tests need an async test runner, such as `pytest-asyncio` or `anyio`.
-`QdrantRetriever`, the default retriever, ranks with BM25 in process and is
-deterministic, so rankings can be asserted exactly. To test hybrid ranking without a
+`LoomRetriever`, the default retriever, ranks with BM25 in memory and is
+deterministic, so rankings can be asserted exactly. Its engine takes a second or two
+to start, so share one retriever, or one runtime, between tests where you can. To test hybrid ranking without a
 model, give it a small deterministic `Embedder` subclass, such as one that hashes
 words into a fixed-size vector.
 

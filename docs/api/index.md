@@ -7,7 +7,7 @@ tracing from `mcp_capability_router.otel`, and conformance suites from
 internal and may change without notice.
 
 ```python
-from mcp_capability_router import MCPRuntime, QdrantRetriever, RefreshPolicy
+from mcp_capability_router import LoomRetriever, MCPRuntime, RefreshPolicy
 from mcp_capability_router.integrations.langchain import CapabilityRoutingMiddleware
 ```
 
@@ -16,7 +16,7 @@ from mcp_capability_router.integrations.langchain import CapabilityRoutingMiddle
 | [Runtime](runtime.md) | `MCPRuntime` and `RoutedTool` |
 | [Capabilities](models.md) | `Capability`, `Tool`, `Resource`, `Prompt`, `PromptArgument`, `CapabilityType`, `HealthState`, and `make_capability_id` |
 | [Refresh policies](refresh.md) | `RefreshPolicy` and `RefreshEventSource` |
-| [Retrieval](retrieval.md) | `QdrantRetriever`, `Embedder`, `RetrievalMode`, and `Fusion` |
+| [Retrieval](retrieval.md) | `LoomRetriever`, `Embedder`, and `document_text` |
 | [Registries](registry.md) | `InMemoryRegistry` |
 | [FastMCP adapter](adapters.md) | `FastMCPAdapter` and `FastMCPTarget` |
 | [Gateway](gateway.md) | `GatewayMode`, `RouterProvider`, and `RouterSearchTransform` |

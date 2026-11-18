@@ -24,7 +24,8 @@ however many servers and tools you register.
 
     ---
 
-    BM25, dense, or hybrid retrieval with Qdrant selects the capabilities that
+    BM25, dense, or hybrid retrieval with RetrievalLoom, optionally reranked, selects
+    the capabilities that
     match each request, so models stay fast, inexpensive, and accurate with thousands of
     tools.
 

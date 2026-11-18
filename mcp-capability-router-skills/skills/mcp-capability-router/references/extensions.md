@@ -16,7 +16,7 @@ Configure downstream objects directly:
 | tenacity, aiolimiter | `AsyncRetrying`, `AsyncLimiter` | Policy `retry`, `rate_limiter` |
 | FastMCP | Client options or configured `Client` | `register_mcp(**client_options)` or target |
 | FastMCP | Server options, transforms, providers | `as_mcp_server(**server_options)` |
-| qdrant-client | `AsyncQdrantClient` and collection | `QdrantRetriever(client=..., collection_name=...)` |
+| RetrievalLoom | Engine config, reranker, components such as a Qdrant store, resources | `LoomRetriever(config=..., reranker=..., components=..., resources=..., collection=...)` |
 | OpenTelemetry | Tracer and meter providers, recorded spans and tool content | `MCPRuntime(tracing=..., tracer_provider=..., capture_tool_content=...)`, `mcp_capability_router.otel`, `OpenTelemetryMetricsSink` |
 | LangChain (extra) | Embeddings, vector store, compressor | `LangChainEmbedder`, `VectorStoreRetriever` |
 
@@ -25,5 +25,5 @@ state by server and pair it with a durable registry. Do not share a single
 unpartitioned store across servers. Application-owned objects remain
 application-owned. Do not pass client options alongside a prebuilt FastMCP client.
 
-Use `QdrantRetriever` for rank fusion and `ToolResultCache` for read-only
+Use `LoomRetriever` for rank fusion and `ToolResultCache` for read-only
 caching, rather than implementing these algorithms again.

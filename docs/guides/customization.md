@@ -17,8 +17,8 @@ configuration behind another settings layer.
 | aiolimiter | Quotas and periods | `ResiliencePolicy.rate_limiter` (`AsyncLimiter`) |
 | FastMCP | Auth, timeout, roots, sampling, elicitation, progress and message handlers | `register_mcp(..., **client_options)` or a prebuilt `Client` |
 | FastMCP | Server name, instructions, auth, transforms, providers | `as_mcp_server(..., **server_options)` |
-| qdrant-client | `AsyncQdrantClient`, collection, fusion, BM25 parameters | `QdrantRetriever(client=..., collection_name=..., fusion=...)` |
-| Any embedding model | `Embedder` subclass | `QdrantRetriever(embedder=...)` |
+| RetrievalLoom | Engine configuration, fusion, rerankers, stores (such as Qdrant), resources | `LoomRetriever(config=..., reranker=..., components=..., resources=...)` |
+| Any embedding model | `Embedder` subclass | `LoomRetriever(embedder=...)` |
 | LangChain (`langchain` extra) | Embeddings, `VectorStore`, document compressor | `LangChainEmbedder`, `VectorStoreRetriever` |
 | LangChain (`langchain` extra) | Model, tool policy, agent middleware | Application-owned agent plus `CapabilityRoutingMiddleware` |
 | OpenTelemetry | Tracer, meter, providers and exporters; spans and tool content capture | `MCPRuntime(tracing=..., tracer_provider=..., capture_tool_content=...)`, `OpenTelemetryInterceptor`, and refresh-engine metrics sink |
@@ -29,7 +29,7 @@ implementation dependencies rather than independently configurable services. Log
 ## Ownership
 
 The runtime closes its registry and retriever, adapters from registered factories,
-and clients it creates. A prebuilt FastMCP `Client`, `AsyncQdrantClient`, external vector store,
+and clients it creates. A prebuilt FastMCP `Client`, RetrievalLoom component, external vector store,
 refresh StateStore, event publisher, cache store, circuit factory, Redis client,
 or telemetry provider remains application-owned. Close these after all runtimes
 using them have stopped. An `AsyncExitStack` is useful for shared resources.

@@ -63,7 +63,7 @@ result = await agent.ainvoke({"messages": [{"role": "user", "content": question}
 - Fixed tool sets: `to_langchain_tool(await runtime.tool(capability_id))` returns a
   `StructuredTool` for `model.bind_tools(...)` and LangGraph `ToolNode`.
 - Gateway tools as LangChain tools: `await mcp_client_tools(fastmcp_client)`.
-- Embeddings: `QdrantRetriever(embedder=LangChainEmbedder(embeddings))`.
+- Embeddings: `LoomRetriever(embedder=LangChainEmbedder(embeddings))`.
 - A LangChain vector store as the retriever: `VectorStoreRetriever(embeddings)`
   or `VectorStoreRetriever(vector_store=store)`, with an optional `reranker`.
 

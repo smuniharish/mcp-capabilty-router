@@ -25,7 +25,7 @@ async def test_routes(runtime: MCPRuntime) -> None:
 ```
 
 - Use an async test runner, such as `pytest-asyncio` in auto mode.
-- The default `QdrantRetriever` (BM25, in process) is deterministic; assert
+- The default `LoomRetriever` (BM25, in memory) is deterministic; assert
   rankings exactly. Add a small deterministic `Embedder` subclass to test hybrid ranking.
 - Set `logging.getLogger("fastmcp").setLevel(logging.CRITICAL)` when tests trigger
   tool errors on purpose.

@@ -13,8 +13,8 @@ from mcp_capability_router import (
     CapabilityType,
     InMemoryRegistry,
     InMemoryResultCacheStore,
+    LoomRetriever,
     MCPAdapter,
-    QdrantRetriever,
     ResultCacheStore,
 )
 from mcp_capability_router.testing import (
@@ -68,9 +68,9 @@ class TestMinimalRegistry(CapabilityRegistryContract):
         return MinimalRegistry()
 
 
-class TestQdrantRetriever(CapabilityRetrieverContract):
+class TestLoomRetriever(CapabilityRetrieverContract):
     async def make_retriever(self) -> CapabilityRetriever:
-        return QdrantRetriever()
+        return LoomRetriever()
 
 
 class TestInMemoryResultCacheStore(ResultCacheStoreContract):

@@ -64,10 +64,11 @@ notification arrives. Without a policy, the application refreshes servers explic
 ## Retrieval
 
 A **retriever** ranks capabilities against a request. Retrieval reads the registry
-only; it never calls a server. `QdrantRetriever`, the default, ranks with BM25 in an
-in-process Qdrant collection: deterministically, with no model and no service. Give
-it an `Embedder` to rank by meaning as well, and an `AsyncQdrantClient` to share the
-index through a Qdrant server.
+only; it never calls a server. `LoomRetriever`, the default, ranks with BM25 in a
+[RetrievalLoom](https://pypi.org/project/retrievalloom/) engine: deterministically,
+with no model and no service. Give it an `Embedder` to rank by meaning as well, a
+reranker to reorder the matches, and RetrievalLoom stores, such as a Qdrant server,
+to share the index between processes.
 
 `MCPRuntime.retrieve` ranks the capabilities that are already known.
 `MCPRuntime.query` refreshes the servers that allow it when nothing matches, then

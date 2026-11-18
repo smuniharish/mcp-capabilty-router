@@ -210,7 +210,7 @@ one connected to the [gateway](gateway.md), into LangChain tools.
 
 ### Embeddings and vector stores
 
-`LangChainEmbedder` lets [`QdrantRetriever`](retrieval.md) rank with any LangChain
+`LangChainEmbedder` lets [`LoomRetriever`](retrieval.md) rank with any LangChain
 embedding model. `VectorStoreRetriever` ranks with any LangChain `VectorStore`
 instead, with an optional document compressor as a reranker. See
 [Retrieval](retrieval.md#langchain-vector-stores).

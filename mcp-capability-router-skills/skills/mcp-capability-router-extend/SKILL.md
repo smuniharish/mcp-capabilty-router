@@ -11,7 +11,7 @@ license: Apache-2.0
 compatibility: Python 3.12 or newer, mcp-capability-router 1.0, async backend APIs.
 metadata:
   author: S. Muni Harish
-  version: "1.0.2"
+  version: "2.0.0"
   documentation: https://mcp-capabilty-router.readthedocs.io/
 ---
 
@@ -45,7 +45,7 @@ metadata:
 - Durable registry and refresh state must be kept together; partition state per server.
 - Keep cache stores scoped to trust boundaries. Use safe serialization and TTLs;
   never deserialize arbitrary executable objects.
-- Do not reimplement tenacity, purgatory, aiolimiter, Qdrant rank fusion, or cache single-flight.
+- Do not reimplement tenacity, purgatory, aiolimiter, RetrievalLoom rank fusion, or cache single-flight.
 - Errors must propagate in the router's classified hierarchy; never replace a failed
   discovery with an empty catalog.
 

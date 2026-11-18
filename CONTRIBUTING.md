@@ -58,9 +58,14 @@ uv run python scripts/check_site_links.py
   runs every test except those of the extras; see `.github/workflows/ci.yml`.
 - Continuous integration runs the Hypothesis tests with more examples. Use the same
   profile locally with `HYPOTHESIS_PROFILE=ci`.
-- Examples that need a model, embeddings, PostgreSQL, Redis, Qdrant, Node.js, or a
+- Examples that need a model, embeddings, PostgreSQL, Redis, Node.js, or a
   browser run only when their environment variable is set; see [`.env.example`](.env.example). The test suite
   runs the model-based examples with scripted models.
+- The `models` dependency group installs sentence-transformers and CPU-only PyTorch
+  for the examples, benchmarks, and live tests that use local models. Copy models,
+  such as `BAAI/bge-m3` and `BAAI/bge-reranker-v2-m3`, into the ignored `models/`
+  directory, and run the live tests with
+  `MCP_ROUTER_LIVE_MODELS=models uv run pytest -m live --no-cov`.
 - After changing an example, regenerate its expected output with
   `uv run python scripts/run_examples.py --update` and review the difference.
 - Code blocks in Markdown must compile and import only public names. Mark a block with
@@ -69,25 +74,25 @@ uv run python scripts/check_site_links.py
   files in documentation with the block form of snippets, which ruff leaves untouched:
   a `--8<--` line, the file path, and another `--8<--` line.
 
-Continuous integration also tests Python 3.12 through 3.15 on Linux and Windows,
+Continuous integration also tests Python 3.12 through 3.14 on Linux and Windows,
 audits the dependencies, and validates the built distributions:
 
 ```bash
 uv build
 uv run twine check --strict dist/*
-uv run python scripts/validate_distribution.py dist --python 3.12 --python 3.15
+uv run python scripts/validate_distribution.py dist --python 3.12 --python 3.14
 ```
 
 ## Making changes
 
 - Add a test for every behavior change, and a regression test for every fix.
-- Build on the ecosystem: use FastMCP, Qdrant, refresh-engine, and well-maintained
+- Build on the ecosystem: use FastMCP, RetrievalLoom, refresh-engine, and well-maintained
   PyPI packages instead of reimplementing what they provide.
 - Keep the core framework-agnostic and async. Code that imports an agent framework
   belongs in `mcp_capability_router.integrations.<framework>`, behind an extra of the
   same name.
 - Define extension points as ABCs, and accept application-owned instances of the
-  customizable parts of dependencies, such as FastMCP clients, Qdrant clients,
+  customizable parts of dependencies, such as FastMCP clients, RetrievalLoom components,
   refresh-engine stores, and purgatory storage.
 - Keep the public API typed and documented with Google-style docstrings. New public
   names must be exported from `mcp_capability_router` or its public `otel`, `testing`,
@@ -132,7 +137,7 @@ Releases are published manually and follow [semantic versioning](https://semver.
    ```bash
    uv build
    uv run twine check --strict dist/*
-   uv run python scripts/validate_distribution.py dist --python 3.12 --python 3.15
+   uv run python scripts/validate_distribution.py dist --python 3.12 --python 3.14
    ```
 
 5. Upload them with `uv publish`, supplying a PyPI API token through

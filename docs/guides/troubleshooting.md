@@ -16,13 +16,13 @@
 **`retrieve` returns nothing**
 : Either the server was never refreshed, or no capability contains the words of the
   request. Use `query` with `on_query_miss`, check that the server's tool names and
-  descriptions contain the words users use, or give `QdrantRetriever` an embedder
+  descriptions contain the words users use, or give `LoomRetriever` an embedder
   for hybrid ranking.
 
 **The wrong tool ranks first**
 : BM25 matches words, not meanings. Improve the tool names, descriptions, and tags,
-  raise `limit` so that the model can choose, or give `QdrantRetriever` an embedder
-  for hybrid ranking. See [Retrieval](retrieval.md).
+  raise `limit` so that the model can choose, or give `LoomRetriever` an embedder
+  for hybrid ranking and a reranker. See [Retrieval](retrieval.md).
 
 ## Refresh
 

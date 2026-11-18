@@ -17,8 +17,8 @@ from mcp_capability_router import (
     HealthState,
     InMemoryRegistry,
     InvalidRequestError,
+    LoomRetriever,
     MCPRuntime,
-    QdrantRetriever,
     RefreshError,
     RefreshPolicy,
     ResiliencePolicy,
@@ -85,11 +85,11 @@ class TestConstruction:
     async def test_defaults_and_custom_collaborators(self) -> None:
         async with MCPRuntime() as default:
             assert isinstance(default.registry, InMemoryRegistry)
-            assert isinstance(default.retriever, QdrantRetriever)
+            assert isinstance(default.retriever, LoomRetriever)
             assert default.servers == ()
             assert not default.closed
         assert default.closed
-        registry, retriever = InMemoryRegistry(), QdrantRetriever()
+        registry, retriever = InMemoryRegistry(), LoomRetriever()
         async with MCPRuntime(registry=registry, retriever=retriever) as custom:
             assert custom.registry is registry
             assert custom.retriever is retriever

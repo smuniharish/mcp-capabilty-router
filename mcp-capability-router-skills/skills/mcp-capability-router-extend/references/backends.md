@@ -26,7 +26,7 @@ State transactions atomically apply both puts and deletes. Preserve every
 cheap indicator, metadata, dependencies, and timezone-aware refresh timestamp.
 Use `(server_id, resource_id)` keys when servers share a table.
 
-Supply an `Embedder` and a configured `AsyncQdrantClient` to `QdrantRetriever`
+Supply an `Embedder`, a reranker, and RetrievalLoom `Components` to `LoomRetriever`
 (or, with the `langchain` extra, a `VectorStore` and compressor to `VectorStoreRetriever`),
 a purgatory factory to `ResiliencePolicy`, and a configured FastMCP `Client` or
 constructor options to `register_mcp`. Close shared pools and clients after their

@@ -159,7 +159,7 @@ class CapabilityRegistry(ABC):
 class CapabilityRetriever(ABC):
     """Ranks candidate capabilities against a query.
 
-    `QdrantRetriever` is the default. Subclass this class to rank capabilities
+    `LoomRetriever` is the default. Subclass this class to rank capabilities
     with another search engine.
     """
 

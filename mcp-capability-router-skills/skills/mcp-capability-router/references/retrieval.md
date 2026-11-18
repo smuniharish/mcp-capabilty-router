@@ -18,25 +18,31 @@ routed = await runtime.route_tools("refund an invoice", limit=5)
   matches, then retrieve again.
 - Results are best first and at most `limit` long; an empty list means no match.
 
-## QdrantRetriever, the default
+## LoomRetriever, the default
+
+`LoomRetriever` ranks with a RetrievalLoom engine.
 
 | Need | Configuration |
 | --- | --- |
-| Deterministic, offline, no model | `QdrantRetriever()`: BM25 in an in-process collection |
-| Natural-language requests, synonyms | `QdrantRetriever(embedder=embedder)`: hybrid BM25 and dense |
-| Meaning only | `mode="dense"` with an embedder |
-| Shared index across processes | `client=AsyncQdrantClient(url=...)`, `collection_name=...` |
-| Fusion | `fusion="rrf"` (default, `rrf_k`) or `"dbsf"`; `prefetch_limit` per ranking |
+| Deterministic, offline, no model | `LoomRetriever()`: BM25 in memory |
+| Natural-language requests, synonyms | `LoomRetriever(embedder=embedder)`: BM25 and dense, fused by RRF |
+| Best order among the matches | `reranker=...`, a RetrievalLoom `RerankerABC` such as a cross-encoder |
+| Index kept across restarts | `resources=EngineResources(data_dir=Path(...))` |
+| Shared index across processes | `components=Components(vector_store=QdrantVectorStore(...))`, `collection=...` |
+| Other ranking methods, fusion, weights | `config=EngineConfig(...)` |
 
 ```python
 from qdrant_client import AsyncQdrantClient
+from retrievalloom import Components
+from retrievalloom.index.vector import QdrantVectorStore
 
-from mcp_capability_router import MCPRuntime, QdrantRetriever
+from mcp_capability_router import LoomRetriever, MCPRuntime
 
-retriever = QdrantRetriever(
+store = QdrantVectorStore(client=AsyncQdrantClient(url="http://localhost:6333"))
+retriever = LoomRetriever(
     embedder=my_embedder,
-    client=AsyncQdrantClient(url="http://localhost:6333"),
-    collection_name="support_capabilities",
+    components=Components(vector_store=store),
+    collection="support_capabilities",
 )
 runtime = MCPRuntime(retriever=retriever)
 ```
@@ -44,10 +50,11 @@ runtime = MCPRuntime(retriever=retriever)
 - An embedder subclasses `Embedder` with async `embed_documents` and
   `embed_query`. With the `langchain` extra, `LangChainEmbedder(embeddings)`
   wraps any LangChain embedding model.
-- The retriever closes only a client it created; close shared clients after the
+- The retriever never closes components it is given; close them after the
   runtime.
 - Give each catalog its own collection.
-
+- The engine starts on the first query, in a second or two; reuse one runtime
+  per process.
 ## How BM25 ranks
 
 - Identifiers are split into words: `read_text_file` and `readTextFile` both
@@ -61,8 +68,8 @@ runtime = MCPRuntime(retriever=retriever)
 ## Indexing
 
 - Capabilities are indexed on first sight and again only when their text
-  changes; an external collection that already holds them is not embedded again.
-- `max_points` (50,000) bounds the index; the least recently seen are evicted.
+  changes; a durable store that already holds them is not embedded again.
+- `max_documents` (50,000) bounds the index; the least recently seen are evicted.
 - Each query searches only its candidates.
 
 ## Improve results
@@ -71,4 +78,4 @@ runtime = MCPRuntime(retriever=retriever)
    descriptions with the users' words, and FastMCP `tags`.
 2. Narrow candidates with `server_id` and `type`.
 3. Raise `limit` so that the model can choose.
-4. Add an embedder for hybrid ranking.
+4. Add an embedder for hybrid ranking, and a reranker for the best order.

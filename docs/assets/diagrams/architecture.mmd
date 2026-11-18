@@ -11,7 +11,7 @@ flowchart TB
         direction LR
         refresh["<b>Discovery and refresh</b><br/>a refresh-engine per server<br/>policies · fingerprints"]
         registry["<b>CapabilityRegistry</b><br/>tool, resource, and<br/>prompt metadata"]
-        retriever["<b>QdrantRetriever</b><br/>BM25 · dense · hybrid"]
+        retriever["<b>LoomRetriever</b><br/>BM25 · dense · hybrid"]
         pipeline["<b>Resilience pipeline</b><br/>concurrency · interceptors · breaker<br/>retry · rate limit · timeout"]
         refresh -- reconciles --> registry
         retriever -- ranks --> registry

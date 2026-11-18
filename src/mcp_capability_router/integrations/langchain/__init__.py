@@ -5,7 +5,7 @@ Needs the `langchain` extra: `pip install "mcp-capability-router[langchain]"`.
 - `to_langchain_tool` turns a `RoutedTool` into a LangChain tool.
 - `CapabilityRoutingMiddleware` gives a LangChain agent only the tools that match
   each turn.
-- `LangChainEmbedder` lets `QdrantRetriever` embed with any LangChain
+- `LangChainEmbedder` lets `LoomRetriever` embed with any LangChain
   `Embeddings`.
 - `VectorStoreRetriever` ranks capabilities with any LangChain vector store.
 - `mcp_client_tools` turns the tools of a connected FastMCP client, such as one
@@ -335,13 +335,13 @@ class CapabilityRoutingMiddleware(AgentMiddleware):
 
 
 class LangChainEmbedder(Embedder):
-    """Lets `QdrantRetriever` embed with any LangChain `Embeddings`.
+    """Lets `LoomRetriever` embed with any LangChain `Embeddings`.
 
     Example:
         ```python
         from langchain_openai import OpenAIEmbeddings
 
-        retriever = QdrantRetriever(
+        retriever = LoomRetriever(
             embedder=LangChainEmbedder(OpenAIEmbeddings(model="text-embedding-3-small"))
         )
         ```
@@ -381,7 +381,7 @@ class VectorStoreRetriever(CapabilityRetriever):
 
     Use it to keep capability vectors in a store that the deployment already
     runs, such as pgvector, Chroma, or Elasticsearch, or to re-rank matches with a
-    LangChain document compressor, such as a cross-encoder. `QdrantRetriever`
+    LangChain document compressor, such as a cross-encoder. `LoomRetriever`
     with a `LangChainEmbedder` is the default choice otherwise.
 
     Capabilities are embedded once and re-embedded only when their text changes;

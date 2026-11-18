@@ -71,7 +71,7 @@ from .models import (
 from .refresh import RefreshEventSource, RefreshPolicy
 from .registry import InMemoryRegistry
 from .resilience import ResiliencePolicy
-from .retrieval import QdrantRetriever
+from .retrieval import LoomRetriever
 from .tools import RoutedTool
 
 if TYPE_CHECKING:
@@ -165,8 +165,8 @@ class MCPRuntime:
         Args:
             registry: Where capability metadata is stored; an `InMemoryRegistry`
                 when `None`. The runtime closes it when it closes.
-            retriever: How capabilities are ranked; a `QdrantRetriever` with an
-                in-memory collection when `None`. The runtime closes it when it
+            retriever: How capabilities are ranked; a `LoomRetriever` with an
+                in-memory RetrievalLoom engine when `None`. The runtime closes it when it
                 closes.
             max_concurrency: The maximum number of server operations that run at
                 the same time, across all servers.
@@ -213,7 +213,7 @@ class MCPRuntime:
             registry if registry is not None else InMemoryRegistry()
         )
         self._retriever: CapabilityRetriever = (
-            retriever if retriever is not None else QdrantRetriever()
+            retriever if retriever is not None else LoomRetriever()
         )
         self._pipeline = OperationPipeline(
             max_concurrency=max_concurrency,

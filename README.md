@@ -31,8 +31,9 @@ current turn, however many servers and tools you register.
 
 - **Only the relevant tools.** Retrieval selects the capabilities that match each
   request, so models stay fast, inexpensive, and accurate with thousands of tools.
-  [Qdrant](https://qdrant.tech) ranks with BM25 out of the box, with no model and no
-  service, and fuses BM25 with any embedding model for hybrid ranking.
+  [RetrievalLoom](https://pypi.org/project/retrievalloom/) ranks with BM25 out of the
+  box, with no model and no service, fuses BM25 with any embedding model for hybrid
+  ranking, and reorders the matches with an optional cross-encoder reranker.
 - **Every MCP server.** Streamable HTTP, SSE, stdio, MCP configurations, and
   in-process servers through [FastMCP](https://gofastmcp.com), with lazy connections
   and automatic reconnection.
@@ -57,8 +58,9 @@ current turn, however many servers and tools you register.
 - **Typed and extensible.** Fully type-annotated ABCs for registries, retrievers,
   adapters, and interceptors, with reusable conformance tests.
 - **Application-owned infrastructure.** Supply refresh StateStores, event publishers,
-  fingerprints, FastMCP clients, Qdrant clients, embedders, or result-cache stores.
-  Share the index in a Qdrant server, share circuits in Redis, and export
+  fingerprints, FastMCP clients, RetrievalLoom stores, embedders, rerankers, or
+  result-cache stores. Keep the index across restarts or in a Qdrant server, share
+  circuits in Redis, and export
   OpenTelemetry spans, recorded by default with no duplicates.
 
 ## Installation
@@ -173,7 +175,8 @@ The [documentation](https://mcp-capabilty-router.readthedocs.io/en/latest/) cove
   feature, including a
   [production checklist](https://mcp-capabilty-router.readthedocs.io/en/latest/guides/production/)
 - [Runnable examples](https://mcp-capabilty-router.readthedocs.io/en/latest/examples/),
-  from a quick start to any framework, the MCP gateway, Deep Agents, and Qdrant
+  from a quick start to any framework, the MCP gateway, Deep Agents, and a durable
+  capability index
 - The [API reference](https://mcp-capabilty-router.readthedocs.io/en/latest/api/)
 - The [architecture](https://mcp-capabilty-router.readthedocs.io/en/latest/architecture/overview/)
   and its guarantees
