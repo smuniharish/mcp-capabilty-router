@@ -45,8 +45,14 @@ def crm_adapter() -> FastMCPAdapter:
 await runtime.register_server("crm", crm_adapter)
 ```
 
-The router never logs tool arguments, results, or credentials, and its metrics carry
-only identifiers, such as server IDs, operation names, outcomes, and states.
+The router does not deliberately include tool arguments or results in its log
+messages, and its metrics carry identifiers such as server IDs, operation names,
+outcomes, and states. Exceptions and third-party logs can still contain sensitive
+data: use non-sensitive identifiers and configure redaction and access controls.
+Router tracing captures tool arguments and results by default when spans are recorded.
+Set `MCPRuntime(capture_tool_content=False)` to omit them from router spans, and
+configure other instrumentation separately. See [Observability](observability.md)
+for details and limitations.
 
 ## Restrict tools
 

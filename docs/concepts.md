@@ -36,9 +36,9 @@ connection to the server: `FastMCPAdapter` reaches every server that FastMCP can
 reach, over Streamable HTTP, SSE, stdio, or in process. `register_mcp` is a shortcut
 for registering a `FastMCPAdapter`.
 
-Registration is lazy. The factory is called when an operation first needs the
-server, and again after `reconnect` or after the connection is lost. Registering a
-hundred servers costs nothing until they are used.
+Connections are lazy: the factory is called when an operation first needs the
+server, and again after `reconnect` or a lost connection. A refresh policy with
+`on_register` opens the connection during registration.
 
 ## Registry
 
@@ -50,9 +50,9 @@ metadata: no tool runs and no resource is read until the application asks for it
 ## Discovery and refresh
 
 **Discovery** lists the tools, resources, and prompts of a server. The runtime runs
-discovery through [refresh-engine](https://refresh-engine.readthedocs.io), which
-compares each capability with the previous discovery and writes only what was added,
-modified, or removed. A failed discovery never removes anything from the registry.
+discovery through [refresh-engine](https://refresh-engine.readthedocs.io) and
+updates the registry to reflect changes. A failed discovery never removes anything
+from the registry.
 
 A **refresh policy** decides when a server is refreshed automatically: when it is
 registered, when a query finds nothing, on a fixed interval, or when a change
@@ -92,13 +92,12 @@ through the same pipeline:
 ![Resilience pipeline](assets/diagrams/resilience-pipeline-light.png#only-light)
 ![Resilience pipeline](assets/diagrams/resilience-pipeline-dark.png#only-dark)
 
-1. A **concurrency limit** bounds the operations in flight across all servers.
-2. **Interceptors** wrap each operation once, for authentication, auditing, or
-   policy checks.
-3. A **circuit breaker** for each server and operation rejects operations while the
-   server keeps failing.
-4. A **retry policy** repeats attempts that failed for a reason that can pass.
-5. Each attempt waits for the **rate limit**, then runs under a **timeout**.
+- **Concurrency and rate limits** bound operations in flight and attempts.
+- **Interceptors** wrap each operation once, for authentication, auditing, or
+  policy checks.
+- **Circuit breakers** reject operations when a server keeps failing.
+- **Retry policies** can repeat eligible failures, and **timeouts** bound each
+  attempt.
 
 Failures are classified into categories, such as connection failures, timeouts,
 authentication failures, and tool errors. The category decides whether a failure is

@@ -1,25 +1,16 @@
-sequenceDiagram
-    autonumber
-    participant A as Agent loop
-    participant I as Integration
-    participant L as Chat model
-    participant R as MCPRuntime
-    participant S as MCP server
+flowchart LR
+    agent["<b>Agent integration</b><br/>user requests · tool results"]
+    model["<b>Chat model</b><br/>receives tool definitions<br/>and requests tool calls"]
+    runtime["<b>MCPRuntime</b><br/>routes and executes tools"]
+    servers["<b>MCP servers</b><br/>provide and run tools"]
 
-    A->>I: before each model call
-    I->>R: route_tools(latest user message, limit)
-    R->>R: rank the registry, without calling any server
-    opt nothing matches
-        R->>S: refresh the servers that allow it
-        S-->>R: tools, resources, and prompts
-        R->>R: rank again
-    end
-    R-->>I: RoutedTools: name, description, input schema
-    I->>L: request with the routed tools as framework tools
-    L-->>A: tool call
-    A->>I: run the tool call
-    I->>R: await routed_tool(arguments)
-    R->>S: call the tool through the resilience pipeline
-    S-->>R: result or error
-    R-->>I: CallToolResult
-    I-->>A: tool result, or an error the model can act on
+    agent <-->|"model requests · tool calls"| model
+    agent <-->|"routing · calls · results"| runtime
+    runtime <-->|"discovery · tool calls"| servers
+
+    classDef app fill:#fff8e1,stroke:#f9a825,color:#4e342e
+    classDef core fill:#ede7f6,stroke:#5e35b1,color:#311b92
+    classDef external fill:#e0f2f1,stroke:#00897b,color:#004d40
+    class agent,model app
+    class runtime core
+    class servers external

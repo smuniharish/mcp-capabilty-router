@@ -18,6 +18,8 @@ import pytest
 from langchain_core.embeddings import DeterministicFakeEmbedding
 from langchain_core.messages import AIMessage
 from openai.types.chat import ChatCompletion
+from opentelemetry.sdk.trace import ReadableSpan
+from opentelemetry.trace import SpanContext, SpanKind
 
 from mcp_capability_router.integrations.langchain import LangChainEmbedder
 from tests.langchain_support import ScriptedChatModel
@@ -41,6 +43,38 @@ def load(name: str) -> ModuleType:
 
 def call(name: str, args: dict[str, Any], call_id: str) -> dict[str, Any]:
     return {"name": name, "args": args, "id": call_id, "type": "tool_call"}
+
+
+def test_trace_tree_has_stable_order_for_concurrent_children(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    root_context = SpanContext(trace_id=1, span_id=1, is_remote=False)
+    root = ReadableSpan("discover", context=root_context, kind=SpanKind.CLIENT, start_time=1)
+    module = load("16_opentelemetry.py")
+    outputs = []
+    for first_start, second_start in ((2, 3), (3, 2)):
+        first = ReadableSpan(
+            "tools/list",
+            context=SpanContext(trace_id=1, span_id=2, is_remote=False),
+            parent=root_context,
+            kind=SpanKind.CLIENT,
+            start_time=first_start,
+        )
+        second = ReadableSpan(
+            "resources/list",
+            context=SpanContext(trace_id=1, span_id=3, is_remote=False),
+            parent=root_context,
+            kind=SpanKind.CLIENT,
+            start_time=second_start,
+        )
+        module.print_tree((root, first, second))
+        outputs.append(capsys.readouterr().out)
+    assert outputs[0] == outputs[1]
+    assert outputs[0].splitlines() == [
+        "discover [client, ]",
+        "  resources/list [client, ]",
+        "  tools/list [client, ]",
+    ]
 
 
 async def test_semantic_retrieval(capsys: pytest.CaptureFixture[str]) -> None:

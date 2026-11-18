@@ -58,7 +58,7 @@ however many servers and tools you register.
 pip install mcp-capability-router
 ```
 
-mcp-capability-router requires Python 3.12 or newer.
+mcp-capability-router supports Python 3.12 through 3.14.
 
 ## A first route
 

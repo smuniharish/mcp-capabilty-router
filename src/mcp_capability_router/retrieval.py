@@ -317,11 +317,8 @@ class LoomRetriever(CapabilityRetriever):
     files across restarts. A `config` replaces the engine
     configuration, including the ranking methods and their fusion.
 
-    Keyword ranking works on words: identifiers such as `read_text_file` or
-    `getWeather` are split into words, plurals match their singular, and closely
-    related word forms match partly. Words in the name or title count most, then
-    tags, then the description or resource URI, and rare words count more than
-    words that most capabilities share.
+    Keyword ranking matches words in capability metadata, including words in
+    identifiers and related word forms.
 
     Capabilities are indexed on first sight and re-indexed only when their text
     changes; the engine skips documents it already holds unchanged, so a

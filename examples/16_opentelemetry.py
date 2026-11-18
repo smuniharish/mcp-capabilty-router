@@ -10,6 +10,7 @@ FastMCP's, or `"off"` to record neither. refresh-engine's
 Providers stay application-owned.
 
 By default the spans and metrics are collected in memory and printed as a tree.
+Root spans are chronological; sibling spans are sorted by name.
 Set `OTEL_EXPORTER_OTLP_ENDPOINT` (for example `http://localhost:4317`) to export
 them over OTLP to a collector, Jaeger, Tempo, Langfuse, or any compatible backend
 instead.
@@ -41,7 +42,12 @@ def print_tree(spans: tuple[ReadableSpan, ...]) -> None:
         children.setdefault(parent, []).append(span)
 
     def show(parent: int | None, depth: int) -> None:
-        for span in sorted(children.get(parent, []), key=lambda span: span.start_time or 0):
+        siblings = children.get(parent, [])
+        if parent is None:
+            ordered = sorted(siblings, key=lambda span: span.start_time or 0)
+        else:
+            ordered = sorted(siblings, key=lambda span: (span.name, span.start_time or 0))
+        for span in ordered:
             scope = span.instrumentation_scope.name if span.instrumentation_scope else ""
             print(f"{'  ' * depth}{span.name} [{span.kind.name.lower()}, {scope}]")
             if span.context:

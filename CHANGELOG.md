@@ -4,7 +4,21 @@ All notable changes are recorded here using
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## Unreleased
+
+## [2.0.1]
+
+### Changed
+
+- Simplified public architecture diagrams and lifecycle explanations while retaining
+  integration and operational contracts.
+- Clarified lazy connections and the default capture of tool content in traces.
+- Aligned package metadata and installation guidance with the supported Python
+  3.12–3.14 range required by RetrievalLoom.
+- Rechecked declared dependencies against stable PyPI releases and corrected skill
+  compatibility metadata.
+- Documented the unresolved Deep Agents and refresh-engine dependency conflict.
+- Made the OpenTelemetry example's concurrent sibling spans print in a stable order.
 
 ## [2.0.0]
 
@@ -141,7 +155,6 @@ are indexed again on first sight.
 
 - Initial release.
 
-[Unreleased]: https://github.com/smuniharish/mcp-capabilty-router/compare/v2.0.0...HEAD
 [2.0.0]: https://github.com/smuniharish/mcp-capabilty-router/compare/v1.0.2...v2.0.0
 [1.0.2]: https://github.com/smuniharish/mcp-capabilty-router/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/smuniharish/mcp-capabilty-router/compare/v1.0.0...v1.0.1

@@ -151,6 +151,14 @@ retries only failures that can pass, and its circuit breakers count them.
 LangChain agents, so the same middleware routes MCP tools next to their planning and
 file tools:
 
+!!! warning "Dependency compatibility"
+    As verified on 2026-11-18, Deep Agents 0.7.39 pulls in a Google SDK whose
+    tenacity requirement conflicts with refresh-engine 1.0.1. A strict resolver
+    cannot install these releases together. The repository's development-only
+    override does not establish upstream compatibility; recheck the
+    [dependency audit](https://github.com/smuniharish/mcp-capabilty-router/blob/HEAD/DEPENDENCY_AUDIT.md#known-development-dependency-conflict)
+    before using this combination in production.
+
 ```python
 from deepagents import create_deep_agent
 

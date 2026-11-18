@@ -19,8 +19,7 @@ The runtime provides:
 
 - **connection management**: lazy connections, one session per server, reconnection
   after a lost connection, and orderly shutdown;
-- **discovery and reconciliation**: listing every server's capabilities and writing
-  only what changed, through refresh-engine;
+- **discovery and refresh**: keeping server capability metadata in the registry;
 - **retrieval**: ranking capability metadata against requests without calling servers;
 - the **resilience pipeline**: concurrency limits, interceptors, circuit breakers,
   retries, rate limits, and timeouts around every server operation;
@@ -37,9 +36,9 @@ detection, tenacity for retries, purgatory for circuit breakers, and aiolimiter 
 rate limits. The router contributes what none of them does: routing, lifecycle, and
 failure semantics across many servers.
 
-**Metadata first, connections on demand.** Discovery stores metadata; retrieval reads
-only metadata. A server is contacted only when an operation needs it, so registering
-many servers is cheap, and routing never waits for the network.
+**Metadata first, connections on demand.** Retrieval uses stored metadata without
+calling a server. Connections are opened when an operation needs them; registration
+or a query miss can trigger discovery when the configured refresh policy permits it.
 
 **Isolation by ownership.** A runtime owns its servers, connections, registry, caches,
 circuit breakers, and background tasks. Nothing is shared between runtimes unless the
@@ -78,11 +77,5 @@ model and no randomness, so routing can be tested exactly and explained.
 
 These guarantees are verified by unit, integration, and property-based tests.
 
-## Complexity
-
-`LoomRetriever` indexes each capability once, and again only when its text changes,
-and each query searches only its candidates. Discovery and change detection take
-*O(N)* time per server. Executing an operation adds constant overhead to the server
-call. See [Performance](../guides/performance.md) for measurements.
-
-See [Request lifecycle](lifecycle.md) for the steps of each operation.
+See [Performance](../guides/performance.md) for measurements and
+[Request lifecycle](lifecycle.md) for operational behavior.

@@ -65,7 +65,7 @@ current turn, however many servers and tools you register.
 
 ## Installation
 
-mcp-capability-router requires Python 3.12 or newer.
+mcp-capability-router supports Python 3.12 through 3.14.
 
 ```bash
 pip install mcp-capability-router

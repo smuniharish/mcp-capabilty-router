@@ -4,12 +4,10 @@ This page follows a server, a request, and a refresh through the runtime.
 
 ## Registering a server
 
-`register_server`, and `register_mcp` which calls it, validates the server ID and
-the refresh policy, and stores the adapter factory without calling it: no connection
-is opened until an operation needs one. If the policy sets `on_register`, the server
-is refreshed before `register_server` returns, and a failed refresh undoes the
-registration. The interval schedule and change events that the policy asks for start
-afterwards.
+`register_server` and `register_mcp` validate the server ID and refresh policy.
+Connections are opened on demand, unless `on_register` requests a refresh before
+registration returns. A failed initial refresh undoes the registration. Configured
+interval and change-event refreshes run in the background.
 
 A registration that is interrupted by an unregistration or a shutdown is undone, and
 `register_server` raises. A server ID cannot be registered again until its previous
@@ -22,17 +20,10 @@ An agent turn with `CapabilityRoutingMiddleware` routes and calls tools like thi
 ![Agent routing](../assets/diagrams/agent-routing-light.png#only-light)
 ![Agent routing](../assets/diagrams/agent-routing-dark.png#only-dark)
 
-1. Before the model call, the middleware queries the runtime with the latest user
-   message.
-2. The runtime lists the candidates from the registry, filtered by type and server,
-   and the retriever ranks them. No server is called.
-3. If nothing matches, the servers that allow it are refreshed, and the candidates are
-   ranked again.
-4. The model receives the best matching tools next to the agent's own tools.
-5. When the model calls a routed tool, the middleware resolves its name to a
-   capability and calls it through the runtime.
-6. The result returns to the model as a tool message; a failure returns as an error
-   tool message.
+Before a model call, the middleware routes the latest user message and supplies
+matching tools alongside the agent's own tools. Retrieval uses capability metadata;
+on a miss, the runtime may refresh servers according to their policies. Routed tool
+calls run through the runtime. Results and failures reach the model as tool messages.
 
 ## Running an operation
 
@@ -42,32 +33,23 @@ or `get_prompt` — runs through the resilience pipeline:
 ![Resilience pipeline](../assets/diagrams/resilience-pipeline-light.png#only-light)
 ![Resilience pipeline](../assets/diagrams/resilience-pipeline-dark.png#only-dark)
 
-1. The operation waits for a slot of the concurrency limit.
-2. The interceptors run, in order, around the rest of the pipeline.
-3. The circuit breaker of the server and operation rejects the operation with
-   `CircuitOpenError` if it is open.
-4. The retry policy, if one is configured, decides whether a failed attempt is
-   repeated; with `retry_if_exception(is_retryable)`, only failures that can pass are.
-5. Each attempt waits for the rate limit, then runs under the timeout. On the first
-   operation, the attempt creates the adapter and opens its connection.
-6. The outcome is recorded in metrics and in the circuit breaker. A lost connection
-   discards the adapter, so the next operation connects again.
+Operations honor the configured concurrency and rate limits, interceptors, circuit
+breakers, retries, and timeout. An open circuit rejects a call with
+`CircuitOpenError`. Interceptors run once per operation, and the timeout applies to
+each attempt. Configure retries with `retry_if_exception(is_retryable)` so failures
+that cannot pass on another attempt are not repeated. Metrics record outcomes; after
+a lost connection, the next operation reconnects.
 
 ## Refreshing a server
 
 ![Refresh flow](../assets/diagrams/refresh-flow-light.png#only-light)
 ![Refresh flow](../assets/diagrams/refresh-flow-dark.png#only-dark)
 
-1. A trigger — a manual call, the registration, an interval, a change event, or a
-   query miss — asks for a refresh of the server.
-2. Discovery lists the server's tools, resources, and prompts through the resilience
-   pipeline, as a `discover` operation.
-3. refresh-engine compares them with the last successful refresh, and only added,
-   modified, and removed capabilities are written to the registry. The first refresh
-   of a registration also removes capabilities that an earlier registration stored
-   and the server no longer offers. After a failed discovery, nothing is removed.
-4. A manual refresh returns the result or raises `RefreshError`. A refresh triggered
-   in the background logs its failure, and the next trigger tries again.
+Manual calls and configured registration, interval, change-event, or query-miss
+triggers refresh a server's tools, resources, and prompts. Successful discovery
+updates the registry, including removal of capabilities the server no longer offers;
+failed discovery removes nothing. A manual refresh returns its result or raises
+`RefreshError`; a background failure is logged and a later trigger can retry.
 
 ## Shutting down
 

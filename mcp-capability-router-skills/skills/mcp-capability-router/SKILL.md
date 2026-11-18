@@ -10,10 +10,10 @@ description: >-
   implement custom extension backends (use mcp-capability-router-extend), or
   call one fixed tool with a plain client.
 license: Apache-2.0
-compatibility: Python 3.12 or newer, mcp-capability-router 1.0, async application lifecycle.
+compatibility: Python 3.12 through 3.14, mcp-capability-router 2.0, async application lifecycle.
 metadata:
   author: S. Muni Harish
-  version: "2.0.0"
+  version: "2.0.1"
   documentation: https://mcp-capabilty-router.readthedocs.io/
 ---
 

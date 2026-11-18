@@ -6,7 +6,7 @@ documentation, examples, and Agent Skills accurate.
 
 ## Development setup
 
-You need Python 3.12 or newer and [uv](https://docs.astral.sh/uv/).
+You need Python 3.12 through 3.14 and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 git clone https://github.com/smuniharish/mcp-capabilty-router.git
@@ -18,6 +18,10 @@ uv sync --all-extras --all-groups
 The default `dev` group includes tests, lint, and types. Use `--all-extras --all-groups`
 for the LangChain integration, code mode, documentation, examples, telemetry, Redis,
 auditing, and packaging checks.
+
+The examples group currently has an upstream dependency conflict that the
+development lock overrides. See the [dependency audit](DEPENDENCY_AUDIT.md#known-development-dependency-conflict)
+before using that combination outside this development environment.
 
 ## Project layout
 

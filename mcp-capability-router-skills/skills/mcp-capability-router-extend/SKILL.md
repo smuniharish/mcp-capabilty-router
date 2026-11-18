@@ -8,10 +8,10 @@ description: >-
   Do not use it for ordinary router configuration or agent integration
   (use mcp-capability-router), building MCP servers, or unrelated database work.
 license: Apache-2.0
-compatibility: Python 3.12 or newer, mcp-capability-router 1.0, async backend APIs.
+compatibility: Python 3.12 through 3.14, mcp-capability-router 2.0, async backend APIs.
 metadata:
   author: S. Muni Harish
-  version: "2.0.0"
+  version: "2.0.1"
   documentation: https://mcp-capabilty-router.readthedocs.io/
 ---
 

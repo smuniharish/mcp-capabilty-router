@@ -7,9 +7,15 @@ the package's official release notes where relevant. Only stable, non-prerelease
 releases were considered. The repository supports Python 3.12–3.14.
 
 The table compares the pre-audit lower bound with the selected requirement and the
-latest stable PyPI version on the verification date. All declared direct dependencies
-were compatible with the supported Python range. The nine version updates were
+latest stable PyPI version on the verification date. All declared direct dependencies'
+Python metadata permits the supported Python range. The ten version updates were
 minor or patch releases; no major-version constraint was widened.
+
+On the subsequent 2.0.1 preparation audit, all 39 declared direct and build
+dependencies were rechecked against PyPI's non-yanked stable releases. Every selected
+lower bound remains current; release-file Python metadata permits Python 3.12, 3.13,
+and 3.14. No requirements or lock selections were upgraded in that audit. Python
+metadata alone does not establish transitive compatibility or wheel availability.
 
 | Class | Package | Pre-audit | Selected | Latest stable | Result |
 | --- | --- | ---: | ---: | ---: | --- |
@@ -58,6 +64,18 @@ the CPU build of PyPI's `2.15.0` release. The security workflow removes the loca
 `+cpu` suffix when submitting that locked version to pip-audit, which looks up
 advisories against PyPI.
 
+### Known development dependency conflict
+
+On 2026-11-18, `uv pip check` found that the examples environment's
+`google-genai` 3.5.0 requires `tenacity>=8.2.3,<9.2.0`, while core dependency
+`refresh-engine` 1.0.1 requires `tenacity>=9.2.1`. Deep Agents 0.7.39 brings in
+`google-genai` through `langchain-google-genai`; published `google-genai` 3.2.0
+through 3.5.0 all have the conflicting bound. The repository's existing uv
+override selects tenacity 9.2.1 for development but does not make the upstream
+requirements compatible or apply to downstream package installations. A strict
+resolver cannot install these releases together. The core-only environment passes
+`uv pip check`; recheck upstream releases before using this combination in production.
+
 ### Compatibility and release-note review
 
 - **FastMCP 4.2.1:** 4.2 introduced a new server-side skills API and deprecated its
@@ -67,8 +85,9 @@ advisories against PyPI.
 - **refresh-engine 1.0.1:** latest compatible 1.0 patch; existing integration and
   refresh tests pass.
 - **LangChain/OpenAI and Deep Agents:** the selected versions retain the existing
-  compatible major constraints and are covered by the full suite and examples.
-  Their Python 3.11+ floor is compatible with this project's Python 3.12+ support.
+  major-version constraints and are exercised by the full suite and examples with
+  the development override described above. Their Python 3.11+ floor is compatible
+  with this project's Python 3.12–3.14 support.
 - **Zensical 0.1.2:** patch release; strict documentation build and link validation
   pass.
 - **Maintenance:** no dependency was removed or replaced. Release cadence varies;

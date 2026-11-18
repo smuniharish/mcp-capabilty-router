@@ -1,26 +1,16 @@
 flowchart LR
-    subgraph triggers["Triggers"]
-        direction TB
-        manual["<b>Manual</b><br/>refresh_server · refresh"]
-        register["<b>On register</b>"]
-        interval["<b>Interval</b><br/>fixed schedule"]
-        events["<b>Change events</b><br/>queue or async iterable"]
-        miss["<b>Query miss</b>"]
-        manual ~~~ register ~~~ interval ~~~ events ~~~ miss
-    end
+    triggers["<b>Refresh triggers</b><br/>manual · registration · interval<br/>change event · query miss"]
+    runtime["<b>MCPRuntime</b><br/>refreshes capability metadata"]
+    server["<b>MCP server</b><br/>tools · resources · prompts"]
+    registry[("<b>Capability registry</b><br/>available metadata")]
 
-    engine["<b>RefreshEngine</b><br/>one per server"]
-    discover["<b>Discover</b><br/>list tools, resources,<br/>and prompts"]
-    detect["<b>Detect changes</b><br/>compare with the<br/>last refresh"]
-    reconcile["<b>Reconcile</b><br/>store added and modified<br/>remove deleted"]
-    registry[("<b>CapabilityRegistry</b>")]
-
-    triggers --> engine --> discover --> detect --> reconcile --> registry
+    triggers --> runtime
+    runtime <-->|"discovery"| server
+    runtime -->|"updates"| registry
 
     classDef core fill:#ede7f6,stroke:#5e35b1,color:#311b92
     classDef trigger fill:#fff8e1,stroke:#f9a825,color:#4e342e
-    classDef storage fill:#e0f2f1,stroke:#00897b,color:#004d40
-    class engine,discover,detect,reconcile core
-    class manual,register,interval,events,miss trigger
-    class registry storage
-    style triggers fill:none,stroke:#f9a825,stroke-dasharray:6 4,color:#f9a825
+    classDef external fill:#e0f2f1,stroke:#00897b,color:#004d40
+    class runtime core
+    class triggers trigger
+    class server,registry external

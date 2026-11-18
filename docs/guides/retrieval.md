@@ -58,9 +58,8 @@ It splits names and identifiers into words, so `read_text_file`, `readTextFile`,
 singular, closely related word forms such as `navigation` and `navigate` match
 partly, and common English stop words are ignored.
 
-Words in a capability's name or title count most, words in its tags count more than
-words in its description or resource URI, and distinctive words count more than
-words that most capabilities share. Ties are broken by capability ID.
+Descriptions, names, tags, and resource URIs all contribute to matching. Ties are
+broken by capability ID.
 
 <!-- test -->
 ```python
@@ -116,8 +115,7 @@ do not use, add an embedder, or write descriptions with the words users say.
 
 ### Hybrid ranking
 
-Give the retriever an `Embedder` and it ranks by meaning as well. The engine fuses
-the BM25 and dense rankings by reciprocal rank fusion:
+Give the retriever an `Embedder` to combine keyword and semantic ranking:
 
 ```python
 from mcp_capability_router import Embedder, LoomRetriever, MCPRuntime
