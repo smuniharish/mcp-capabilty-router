@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 import re
 from typing import TYPE_CHECKING, Any
 
@@ -447,9 +448,17 @@ class TestComponents:
         assert await retriever.retrieve("navigation", [tool("s", "navigate")], limit=1) == []
         await retriever.close()
 
+    @pytest.mark.filterwarnings(
+        "ignore:Exception ignored while finalizing database connection"
+        "|Exception ignored in. <sqlite3.Connection"
+        ":pytest.PytestUnraisableExceptionWarning"
+    )
     async def test_a_reranker_in_the_components_enables_reranking(self) -> None:
         reranker = LengthReranker()
         retriever = LoomRetriever(components=Components(reranker=reranker))
         await retriever.retrieve("email", catalog(), limit=1)
         assert reranker.calls == 1
         await retriever.close()
+        del retriever
+        # Run SQLite's finalizers before this test's warning filter ends.
+        gc.collect()
