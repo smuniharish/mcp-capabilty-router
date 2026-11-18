@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from fastmcp.client.client import CallToolResult
 from mcp import types
 
+import mcp_capability_router.interceptors as interceptors
 from mcp_capability_router import (
     ConfigurationError,
     InMemoryResultCacheStore,
@@ -51,7 +53,15 @@ class TestInMemoryResultCacheStore:
         with pytest.raises(ConfigurationError, match="max_entries"):
             InMemoryResultCacheStore(max_entries=value)
 
-    async def test_evicts_least_recently_used_and_expired_entries(self) -> None:
+    async def test_evicts_least_recently_used_and_expired_entries(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        now = 0.0
+
+        def monotonic() -> float:
+            return now
+
+        monkeypatch.setattr(interceptors, "time", SimpleNamespace(monotonic=monotonic))
         store = InMemoryResultCacheStore(max_entries=2)
         await store.set("a", 1, 60)
         await store.set("b", 2, 60)
@@ -61,7 +71,8 @@ class TestInMemoryResultCacheStore:
         assert await store.get("b") is None
         assert await store.get("a") == 1
         await store.set("d", 4, 0.001)
-        await asyncio.sleep(0.01)
+        assert await store.get("d") == 4
+        now += 0.002
         assert await store.get("d") is None
         assert len(store) == 1
 
