@@ -6,6 +6,10 @@ All notable changes are recorded here using
 
 ## Unreleased
 
+### Added
+
+- Live PyPI download badges and a link to interactive download charts.
+
 ## [2.0.1]
 
 ### Changed
